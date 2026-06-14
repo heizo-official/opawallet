@@ -454,7 +454,7 @@ Assets
         class="swap-amount"
         placeholder="0">
 
-        <button class="token-select">
+        <button class="token-select" onclick="openTokenModal(this)">
             WLD ▼
         </button>
 
@@ -479,7 +479,7 @@ Assets
         class="swap-amount"
         placeholder="0">
 
-        <button class="token-select">
+        <button class="token-select" onclick="openTokenModal(this)">
             Select ▼
         </button>
 
@@ -620,6 +620,34 @@ Assets
   </div>
 </div>
 
+<div id="token-modal" class="token-modal" style="display:none;">
+
+    <div class="token-modal-content">
+
+        <div class="token-modal-title">
+            Select Token
+        </div>
+
+        <div class="token-option" onclick="selectToken('WLD')">
+            WLD
+        </div>
+
+        <div class="token-option" onclick="selectToken('USDC')">
+            USDC
+        </div>
+
+        <div class="token-option" onclick="selectToken('OPA')">
+            OPA
+        </div>
+
+        <div class="token-option cancel" onclick="closeTokenModal()">
+            Cancel
+        </div>
+
+    </div>
+
+</div>
+
 <nav class="bottom-nav">
 
     <button class="nav-btn active"
@@ -655,6 +683,26 @@ btn.classList.remove("active");
 
 button.classList.add("active");
 
+}
+
+let currentTokenButton = null;
+
+function openTokenModal(button){
+    currentTokenButton = button;
+    document.getElementById("token-modal").style.display = "flex";
+}
+
+function closeTokenModal(){
+    document.getElementById("token-modal").style.display = "none";
+}
+
+function selectToken(token){
+
+    if(currentTokenButton){
+        currentTokenButton.innerHTML = token + " ▼";
+    }
+
+    closeTokenModal();
 }
 
 </script>
