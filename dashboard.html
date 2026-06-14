@@ -278,16 +278,25 @@ border-top:1px solid #e5e5e5;
     background:rgba(0,0,0,.45);
     display:flex;
     justify-content:center;
-    align-items:center;
+    align-items:flex-end;
     z-index:5000;
 }
 
 .token-modal-content{
-    width:85%;
-    max-width:320px;
+    width:100%;
+    max-width:none;
     background:white;
-    border-radius:20px;
-    overflow:hidden;
+
+    border-top-left-radius:24px;
+    border-top-right-radius:24px;
+
+    border-bottom-left-radius:0;
+    border-bottom-right-radius:0;
+
+    max-height:75vh;
+    overflow-y:auto;
+
+    padding-bottom:20px;
 }
 
 .token-modal-title{
