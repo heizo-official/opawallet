@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>OpaWallet</title>
+
+<style>
+
+body{
+margin:0;
+background:#000;
+color:white;
+font-family:Arial,sans-serif;
+}
+
+.header{
+padding:20px;
+font-size:24px;
+font-weight:bold;
+}
+
+.wallet-card{
+margin:20px;
+padding:25px;
+background:#111;
+border-radius:20px;
+text-align:center;
+}
+
+.balance-label{
+color:#888;
+font-size:14px;
+}
+
+.balance{
+font-size:42px;
+font-weight:bold;
+margin-top:10px;
+}
+
+.token{
+color:#ff7a00;
+}
+
+.actions{
+display:flex;
+justify-content:center;
+gap:15px;
+margin-top:25px;
+}
+
+.btn{
+background:#ff7a00;
+color:white;
+padding:12px 24px;
+border-radius:12px;
+text-decoration:none;
+font-weight:bold;
+}
+
+.section{
+padding:20px;
+}
+
+.section-title{
+font-size:20px;
+margin-bottom:15px;
+}
+
+.empty{
+color:#666;
+}
+
+</style>
+</head>
+
+<body>
+
+<div class="header">
+OpaWallet
+</div>
+
+<div class="wallet-card">
+
+<div class="balance-label">
+Total Balance
+</div>
+
+<div class="balance">
+0.00 <span class="token">WLD</span>
+</div>
+
+<div class="actions">
+<a href="#" class="btn">Send</a>
+<a href="#" class="btn">Receive</a>
+</div>
+
+</div>
+
+<div class="section">
+
+<div class="section-title">
+Recent Activity
+</div>
+
+<div class="empty">
+No transactions yet
+</div>
+
+</div>
+
+</body>
+</html>
