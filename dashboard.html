@@ -1254,5 +1254,34 @@ function swapTokens(){
 
 </script>
 
+<div id="token-details-modal"
+     class="token-modal"
+     style="display:none;"
+     onclick="closeTokenDetails()">
+
+    <div class="token-modal-content"
+         onclick="event.stopPropagation()">
+
+        <div class="token-modal-header">
+
+            <div class="token-modal-title">
+                Token Details
+            </div>
+
+            <button class="token-close-btn"
+                    onclick="closeTokenDetails()">
+                ✕
+            </button>
+
+        </div>
+
+        <div id="token-details-content">
+
+        </div>
+
+    </div>
+
+</div>
+
 </body>
 </html>
