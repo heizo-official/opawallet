@@ -469,6 +469,31 @@ border-top:1px solid #e5e5e5;
     border-radius:16px;
 }
 
+.token-details-top{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    margin-bottom:20px;
+}
+
+.token-details-left{
+    display:flex;
+    align-items:center;
+    gap:12px;
+}
+
+#detail-token-name{
+    font-size:24px;
+    font-weight:bold;
+    color:#111;
+}
+
+#detail-token-price{
+    font-size:22px;
+    font-weight:bold;
+    color:#111;
+}
+
 </style>
 </head>
 
@@ -1288,7 +1313,27 @@ function swapTokens(){
 
         <div id="token-details-content">
 
+    <div class="token-details-top">
+
+        <div class="token-details-left">
+
+            <div class="token-icon">
+                W
+            </div>
+
+            <div id="detail-token-name">
+                WLD
+            </div>
+
         </div>
+
+        <div id="detail-token-price">
+            $1.52
+        </div>
+
+    </div>
+
+            </div>
 
     </div>
 
