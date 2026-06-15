@@ -1286,6 +1286,19 @@ function swapTokens(){
         topToken;
 }
 
+document.addEventListener("DOMContentLoaded", () => {
+
+    document.querySelectorAll(".token-item")
+        .forEach(token => {
+
+            token.addEventListener("click", () => {
+                openTokenDetails();
+            });
+
+        });
+
+});
+
 </script>
 
 <div id="token-details-modal"
@@ -1330,6 +1343,66 @@ function swapTokens(){
         </div>
 
     </div>
+
+        <div class="token-chart">
+
+    <div class="chart-buttons">
+
+        <button class="chart-btn active">1H</button>
+
+        <button class="chart-btn">1D</button>
+
+        <button class="chart-btn">1W</button>
+
+    </div>
+
+    <div class="chart-placeholder">
+
+        Chart
+
+    </div>
+
+</div>
+
+<div class="token-stats">
+
+    <div class="token-stat">
+
+        <div class="stat-label">
+            Market Cap
+        </div>
+
+        <div id="detail-marketcap">
+            $5.1K
+        </div>
+
+    </div>
+
+    <div class="token-stat">
+
+        <div class="stat-label">
+            Liquidity
+        </div>
+
+        <div id="detail-liquidity">
+            $94
+        </div>
+
+    </div>
+
+    <div class="token-stat">
+
+        <div class="stat-label">
+            Volume
+        </div>
+
+        <div id="detail-volume">
+            $48
+        </div>
+
+    </div>
+
+</div>
 
             </div>
 
