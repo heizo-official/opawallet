@@ -314,11 +314,47 @@ border-top:1px solid #e5e5e5;
 }
 
 .token-option{
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-start;
+
     padding:16px;
-    text-align:center;
+
     border-bottom:1px solid #e5e5e5;
+
     cursor:pointer;
 }
+
+    .token-left{
+    display:flex;
+    align-items:center;
+    gap:14px;
+}
+
+.token-info{
+    text-align:left;
+}
+
+.token-value{
+    font-size:16px;
+    font-weight:500;
+    color:#666;
+
+    margin-top:4px;
+
+    text-align:right;
+}
+
+    .token-logo{
+    width:40px;
+    height:40px;
+
+    display:flex;
+    align-items:center;
+    justify-content:center;
+
+    font-size:20px;
+    }
 
 .token-option.cancel{
     font-weight:700;
