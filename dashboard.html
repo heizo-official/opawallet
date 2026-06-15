@@ -288,7 +288,7 @@ border-top:1px solid #e5e5e5;
     border-top-left-radius:24px;
     border-top-right-radius:24px;
 
-    overflow-y:auto;
+    overflow:hidden;
 
     position:absolute;
     bottom:0;
@@ -396,6 +396,11 @@ border-top:1px solid #e5e5e5;
     padding:4px 16px 4px 16px;
 }
 
+.token-list{
+    overflow-y:auto;
+    height:calc(80vh - 140px);
+}
+    
 .token-search-input{
     width:100%;
     height:56px;
@@ -797,6 +802,8 @@ Assets
         class="token-search-input">
 </div>
 
+<div class="token-list">
+
 <div class="token-option" onclick="selectToken('WLD')">
 
     <div class="token-left">
@@ -996,6 +1003,8 @@ Assets
 </div>
 
     </div>
+
+</div>
 
 </div>
 
