@@ -508,7 +508,8 @@ Total Balance
 Assets
 </div>
 
-<div class="token-item wallet-token">
+<div class="token-item wallet-token"
+     onclick="openTokenDetails()">
 
   <div class="token-left">
 
@@ -585,7 +586,8 @@ Assets
 
       <div class="trending-list">
 
-        <div class="token-item markets-token">
+        <div class="token-item markets-token"
+     onclick="openTokenDetails()">
             <div class="token-left">
                 <div class="token-icon">W</div>
                 <div>
@@ -826,7 +828,8 @@ Assets
 
     <div class="swap-trending-list">
 
-    <div class="token-item">
+    <div class="token-item"
+     onclick="openTokenDetails()">
     <div class="token-left">
         <div class="token-icon">W</div>
         <div>
@@ -1230,6 +1233,14 @@ function selectToken(token){
     }
 
     closeTokenModal();
+}
+
+function openTokenDetails(){
+    document.getElementById("token-details-modal").style.display = "flex";
+}
+
+function closeTokenDetails(){
+    document.getElementById("token-details-modal").style.display = "none";
 }
 
 function swapTokens(){
