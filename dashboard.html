@@ -324,6 +324,26 @@ border-top:1px solid #e5e5e5;
     font-weight:700;
 }
 
+.token-modal-header{
+    position:relative;
+    padding:20px;
+    text-align:center;
+    border-bottom:1px solid #eee;
+}
+
+.token-close-btn{
+    position:absolute;
+    right:20px;
+    top:50%;
+    transform:translateY(-50%);
+
+    background:none;
+    border:none;
+
+    font-size:28px;
+    cursor:pointer;
+}
+
 </style>
 </head>
 
@@ -675,12 +695,25 @@ Assets
   </div>
 </div>
 
-<div id="token-modal" class="token-modal" style="display:none;">
+<div id="token-modal"
+     class="token-modal"
+     style="display:none;"
+     onclick="closeTokenModal()">
 
-    <div class="token-modal-content">
+    <div class="token-modal-content"
+     onclick="event.stopPropagation()">
 
-        <div class="token-modal-title">
-            Select Token
+        <div class="token-modal-header">
+
+    <div class="token-modal-title">
+        Select Token
+    </div>
+
+    <button class="token-close-btn"
+            onclick="closeTokenModal()">
+        ✕
+    </button>
+
         </div>
 
         <div class="token-search">
@@ -766,10 +799,6 @@ Assets
         $0.00
     </div>
 
-</div>
-
-<div class="token-option cancel" onclick="closeTokenModal()">
-    Cancel
 </div>
 
     </div>
