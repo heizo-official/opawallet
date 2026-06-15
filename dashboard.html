@@ -281,11 +281,29 @@ border-top:1px solid #e5e5e5;
 
 .token-modal-content{
     width:100%;
-    height:85vh;
+    height:80vh;
     background:white;
+
     border-top-left-radius:24px;
     border-top-right-radius:24px;
+
+    overflow-y:auto;
+
+    position:absolute;
+    bottom:0;
+    left:0;
+
+    animation:slideUp .25s ease;
 }
+
+    @keyframes slideUp{
+    from{
+        transform:translateY(100%);
+    }
+    to{
+        transform:translateY(0);
+    }
+    }
 
 .token-modal-title{
     text-align:center;
