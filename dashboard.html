@@ -575,6 +575,60 @@ border-top:1px solid #e5e5e5;
     font-weight:bold;
 }
 
+.token-extra-info{
+    display:flex;
+    justify-content:space-between;
+    margin-top:24px;
+    margin-bottom:28px;
+}
+
+.token-address-box,
+.token-balance-box{
+    display:flex;
+    flex-direction:column;
+}
+
+.token-extra-label{
+    font-size:14px;
+    color:#888;
+    margin-bottom:6px;
+}
+
+#detail-token-address{
+    font-size:18px;
+    font-weight:500;
+}
+
+#detail-token-balance{
+    font-size:18px;
+    font-weight:500;
+}
+
+.token-action{
+    width:100%;
+    margin-top:10px;
+}
+
+#detail-swap-btn{
+    width:100%;
+    height:52px;
+
+    border:none;
+    border-radius:14px;
+
+    background:#000;
+    color:#fff;
+
+    font-size:18px;
+    font-weight:600;
+
+    cursor:pointer;
+}
+
+#swap-token-name{
+    margin-left:4px;
+}
+
 </style>
 </head>
 
@@ -1483,6 +1537,41 @@ document.addEventListener("DOMContentLoaded", () => {
     </div>
 
 </div>
+
+    <div class="token-extra-info">
+
+    <div class="token-address-box">
+        <div class="token-extra-label">
+            Address
+        </div>
+
+        <div id="detail-token-address">
+            0xA0b8...Eb48
+        </div>
+    </div>
+
+    <div class="token-balance-box">
+        <div class="token-extra-label">
+            Balance
+        </div>
+
+        <div id="detail-token-balance">
+            1,900,000 WLD
+        </div>
+    </div>
+
+    </div>
+
+            <div class="token-action">
+
+    <button id="detail-swap-btn">
+        Swap
+        <span id="swap-token-name">
+            WLD
+        </span>
+    </button>
+
+            </div>
 
             </div>
 
