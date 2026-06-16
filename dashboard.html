@@ -687,7 +687,7 @@ Total Balance
 Assets
 </div>
 
-<div class="token-item wallet-token">
+<div class="token-item wallet-token" data-symbol="USDC">
 
   <div class="token-left">
 
@@ -708,7 +708,7 @@ Assets
 
 </div>
 
-<div class="token-item wallet-token">
+<div class="token-item wallet-token" data-symbol="WLD">
 
   <div class="token-left">
 
@@ -1412,13 +1412,27 @@ function selectToken(token){
     closeTokenModal();
 }
 
-function openTokenDetails(){
+function openTokenDetails(token){
+
+    const symbol = token.dataset.symbol || "TOKEN";
+
+    document.getElementById("detail-token-name").innerText =
+        symbol;
+
     document.getElementById("token-details-modal").style.display =
         "flex";
+
+    loadTokenData(symbol);
 }
 
 function closeTokenDetails(){
     document.getElementById("token-details-modal").style.display = "none";
+}
+
+async function loadTokenData(symbol){
+
+    console.log("Buscando:", symbol);
+
 }
 
 function swapTokens(){
@@ -1447,7 +1461,7 @@ document.addEventListener("DOMContentLoaded", () => {
         .forEach(token => {
 
      token.addEventListener("click", () => {
-    openTokenDetails();
+    openTokenDetails(token);
 });
 
         });
