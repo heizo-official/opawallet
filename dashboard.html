@@ -1392,6 +1392,7 @@ button.classList.add("active");
 }
 
 let currentTokenButton = null;
+let selectedDetailToken = "";
 
 function openTokenModal(button){
     currentTokenButton = button;
@@ -1411,8 +1412,18 @@ function selectToken(token){
     closeTokenModal();
 }
 
-function openTokenDetails(){
-    document.getElementById("token-details-modal").style.display = "flex";
+function openTokenDetails(tokenElement){
+
+    const tokenName =
+        tokenElement.querySelector(".token-symbol").innerText;
+
+    selectedDetailToken = tokenName;
+
+    document.getElementById("detail-token-name").innerText =
+        tokenName;
+
+    document.getElementById("token-details-modal").style.display =
+        "flex";
 }
 
 function closeTokenDetails(){
@@ -1444,9 +1455,9 @@ document.addEventListener("DOMContentLoaded", () => {
     document.querySelectorAll(".token-item")
         .forEach(token => {
 
-            token.addEventListener("click", () => {
-                openTokenDetails();
-            });
+     token.addEventListener("click", () => {
+         openTokenDetails(token);
+        });
 
         });
 
