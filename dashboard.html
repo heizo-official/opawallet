@@ -871,6 +871,17 @@ button.classList.add("active");
 
 function connectWallet(){
 
+    if(typeof MiniKit === "undefined"){
+
+        document.getElementById("wallet-address").innerText =
+        "World App Only";
+
+        document.getElementById("wallet-status").innerText =
+        "Open inside World App";
+
+        return;
+    }
+
     document.getElementById("wallet-address").innerText =
     "Connecting...";
 
