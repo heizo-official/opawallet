@@ -877,13 +877,6 @@ button.classList.add("active");
 
 function connectWallet(){
 
-    console.log("MiniKit:", MiniKit);
-
-console.log(
-    "Installed:",
-    MiniKit.isInstalled()
-);
-
     if(typeof MiniKit === "undefined"){
 
         document.getElementById("wallet-address").innerText =
