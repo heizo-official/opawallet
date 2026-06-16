@@ -1412,16 +1412,7 @@ function selectToken(token){
     closeTokenModal();
 }
 
-function openTokenDetails(tokenElement){
-
-    const tokenName =
-        tokenElement.querySelector(".token-symbol").innerText;
-
-    selectedDetailToken = tokenName;
-
-    document.getElementById("detail-token-name").innerText =
-        tokenName;
-
+function openTokenDetails(){
     document.getElementById("token-details-modal").style.display =
         "flex";
 }
@@ -1456,8 +1447,8 @@ document.addEventListener("DOMContentLoaded", () => {
         .forEach(token => {
 
      token.addEventListener("click", () => {
-         openTokenDetails(token);
-        });
+    openTokenDetails();
+});
 
         });
 
