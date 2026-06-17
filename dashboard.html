@@ -905,6 +905,8 @@ function connectWallet(){
 
   alert(typeof MiniKit);
 
+  alert(MiniKit.isInWorldApp());
+
   MiniKit.getUserInfo()
 .then(user => {
     alert(JSON.stringify(user));
