@@ -74,5 +74,15 @@ font-weight:bold;
 
 </div>
 
+<script>
+document.getElementById("loginBtn").addEventListener("click", () => {
+
+    localStorage.setItem("opaLogged", "true");
+
+    window.location.href = "dashboard.html";
+
+});
+</script>
+
 </body>
 </html>
