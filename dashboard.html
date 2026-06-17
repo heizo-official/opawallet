@@ -878,7 +878,7 @@ button.classList.add("active");
 
 }
 
-function connectWallet(){
+async function connectWallet() {
 
     if(typeof MiniKit === "undefined"){
 
@@ -897,21 +897,22 @@ function connectWallet(){
     document.getElementById("wallet-status").innerText =
     "Waiting for World App";
 
-    alert(typeof MiniKit.walletAuth);
+    const nonce = "OPAWALLET2026";
 
-  MiniKit.getUserInfo()
-.then(user => {
-    
-
-    document.getElementById("wallet-address").innerText =
-        user.username || "Usuario";
-
-    document.getElementById("wallet-status").innerText =
-        "Conectado";
-})
-.catch(err => {
-    
+const result = await MiniKit.walletAuth({
+    nonce,
+    statement: "Sign in to OpaWallet"
 });
+
+if (result.executedWith === "fallback") {
+    return;
+}
+
+document.getElementById("wallet-address").innerText =
+    result.data.address;
+
+document.getElementById("wallet-status").innerText =
+    "Wallet Connected";
 
 }
 
