@@ -897,19 +897,9 @@ function connectWallet(){
     document.getElementById("wallet-status").innerText =
     "Waiting for World App";
 
-    alert("MiniKit OK");
-
-  alert("isInstalled: " + MiniKit.isInstalled());
-
-  alert("isReady: " + MiniKit._isReady);
-
-  alert(typeof MiniKit);
-
-  alert(MiniKit.isInWorldApp());
-
   MiniKit.getUserInfo()
 .then(user => {
-    alert(JSON.stringify(user));
+    
 
     document.getElementById("wallet-address").innerText =
         user.username || "Usuario";
@@ -918,7 +908,7 @@ function connectWallet(){
         "Conectado";
 })
 .catch(err => {
-    alert("ERROR: " + JSON.stringify(err));
+    
 });
 
 }
