@@ -889,35 +889,7 @@ async function connectWallet() {
         "Open inside World App";
 
         return;
-    }
-
-    document.getElementById("wallet-address").innerText =
-    "Connecting...";
-
-    document.getElementById("wallet-status").innerText =
-    "Waiting for World App";
-
-    const nonce = "OPAWALLET2026";
-
-const result = await MiniKit.walletAuth({
-    nonce,
-    statement: "Sign in to OpaWallet"
-});
-
-if (result.executedWith === "fallback") {
-    return;
-}
-
-const shortAddress =
-    result.data.address.slice(0,6) +
-    "..." +
-    result.data.address.slice(-4);
-
-document.getElementById("wallet-address").innerText =
-    shortAddress;
-
-document.getElementById("wallet-status").innerText =
-    "Connected";
+    }   
 
 }
 
