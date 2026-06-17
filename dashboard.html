@@ -897,6 +897,8 @@ function connectWallet(){
     document.getElementById("wallet-status").innerText =
     "Waiting for World App";
 
+    alert(typeof MiniKit.walletAuth);
+
   MiniKit.getUserInfo()
 .then(user => {
     
