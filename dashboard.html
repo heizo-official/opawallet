@@ -13,10 +13,6 @@ console.log(MiniKit);
 window.MiniKit = MiniKit;
 alert(JSON.stringify(Object.getOwnPropertyNames(MiniKit)));
 
-setTimeout(() => {
-    alert("Ready después de 3s: " + MiniKit._isReady);
-}, 3000);
-
 MiniKit.install();
 </script>
 
