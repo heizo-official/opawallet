@@ -897,13 +897,11 @@ function connectWallet(){
     document.getElementById("wallet-status").innerText =
     "Waiting for World App";
 
-    alert("MiniKit detectado");
+    alert("MiniKit OK");
 
-    alert(Object.keys(MiniKit).join(", "));
+  alert("isInstalled: " + MiniKit.isInstalled());
 
-    alert("isReady: " + MiniKit._isReady);
-
-    alert("isInstalled: " + MiniKit.isInstalled());
+  alert("isReady: " + MiniKit._isReady);
 
 }
 
