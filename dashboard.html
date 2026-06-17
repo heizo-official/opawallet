@@ -11,6 +11,10 @@ import { MiniKit } from "https://cdn.jsdelivr.net/npm/@worldcoin/minikit-js@late
 
 window.MiniKit = MiniKit;
 
+setTimeout(() => {
+    alert("Ready después de 3s: " + MiniKit._isReady);
+}, 3000);
+
 MiniKit.install();
 </script>
 
