@@ -905,6 +905,20 @@ function connectWallet(){
 
   alert(typeof MiniKit);
 
+  MiniKit.getUserInfo()
+.then(user => {
+    alert(JSON.stringify(user));
+
+    document.getElementById("wallet-address").innerText =
+        user.username || "Usuario";
+
+    document.getElementById("wallet-status").innerText =
+        "Conectado";
+})
+.catch(err => {
+    alert("ERROR: " + JSON.stringify(err));
+});
+
 }
 
 let currentTokenButton = null;
