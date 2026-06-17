@@ -75,13 +75,36 @@ font-weight:bold;
 </div>
 
 <script>
-document.getElementById("loginBtn").addEventListener("click", () => {
+
+document.getElementById("loginBtn").addEventListener("click", async () => {
+
+    if (typeof MiniKit === "undefined") {
+        alert("Open inside World App");
+        return;
+    }
+
+    const nonce = "OPAWALLET2026";
+
+    const result = await MiniKit.walletAuth({
+        nonce,
+        statement: "Sign in to OpaWallet"
+    });
+
+    if (result.executedWith === "fallback") {
+        return;
+    }
 
     localStorage.setItem("opaLogged", "true");
+
+    localStorage.setItem(
+        "walletAddress",
+        result.data.address
+    );
 
     window.location.href = "dashboard.html";
 
 });
+
 </script>
 
 </body>
