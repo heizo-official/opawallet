@@ -896,6 +896,23 @@ async function connectWallet() {
 let currentTokenButton = null;
 let selectedDetailToken = "";
 
+const savedAddress =
+    localStorage.getItem("walletAddress");
+
+if(savedAddress){
+
+    const shortAddress =
+        savedAddress.slice(0,6) +
+        "..." +
+        savedAddress.slice(-4);
+
+    document.getElementById("wallet-address").innerText =
+        shortAddress;
+
+    document.getElementById("wallet-status").innerText =
+        "Connected";
+}
+
 function openTokenModal(button){
     currentTokenButton = button;
     document.getElementById("token-modal").style.display = "flex";
