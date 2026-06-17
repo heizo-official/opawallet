@@ -9,7 +9,9 @@
 <script type="module">
 import { MiniKit } from "https://cdn.jsdelivr.net/npm/@worldcoin/minikit-js@latest/+esm";
 
+console.log(MiniKit);
 window.MiniKit = MiniKit;
+alert(JSON.stringify(Object.getOwnPropertyNames(MiniKit)));
 
 setTimeout(() => {
     alert("Ready después de 3s: " + MiniKit._isReady);
