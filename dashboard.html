@@ -908,11 +908,16 @@ if (result.executedWith === "fallback") {
     return;
 }
 
+const shortAddress =
+    result.data.address.slice(0,6) +
+    "..." +
+    result.data.address.slice(-4);
+
 document.getElementById("wallet-address").innerText =
-    result.data.address;
+    shortAddress;
 
 document.getElementById("wallet-status").innerText =
-    "Wallet Connected";
+    "Connected";
 
 }
 
