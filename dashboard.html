@@ -917,16 +917,44 @@ if(savedAddress){
 
 async function loadAssets(){
 
-    document.getElementById("assets-list").innerHTML = `
-        <div class="asset-card">
-            <div>
-                <div class="asset-name">World Assets</div>
-                <div class="asset-symbol">
-                    Asset loading will be available soon
-                </div>
-            </div>
-        </div>
-    `;
+const address =
+localStorage.getItem("walletAddress");
+
+if(!address){
+return;
+}
+
+try{
+
+const provider =
+new ethers.JsonRpcProvider(
+"https://worldchain-mainnet.g.alchemy.com/public"
+);
+
+const balance =
+await provider.getBalance(address);
+
+const wld =
+ethers.formatEther(balance);
+
+document.getElementById("assets-list").innerHTML = `
+<div class="asset-card">
+<div>
+<div class="asset-name">World Chain</div>
+<div class="asset-symbol">
+${Number(wld).toFixed(4)} WLD
+</div>
+</div>
+</div>
+`;
+
+}catch(error){
+
+console.error(error);
+
+}
+
+}
 
 }
 
