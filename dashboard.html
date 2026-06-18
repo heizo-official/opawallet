@@ -926,33 +926,20 @@ return;
 
 try{
 
-const provider =
-new ethers.JsonRpcProvider(
-"https://worldchain-mainnet.g.alchemy.com/public"
-);
-
-const balance =
-await provider.getBalance(address);
-
-const wld =
-ethers.formatEther(balance);
-
 document.getElementById("assets-list").innerHTML = `
 <div class="asset-card">
-<div>
-<div class="asset-name">World Chain</div>
-<div class="asset-symbol">
-${Number(wld).toFixed(4)} WLD
-</div>
-</div>
+    <div>
+        <div class="asset-name">PRUEBA</div>
+        <div class="asset-symbol">
+            SI VES ESTO EL HTML FUNCIONA
+        </div>
+    </div>
 </div>
 `;
 
 }catch(error){
 
 console.error(error);
-
-}
 
 }
 
