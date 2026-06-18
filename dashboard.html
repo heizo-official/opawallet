@@ -913,6 +913,24 @@ if(savedAddress){
         "Connected";
 }
 
+function loadAssets(){
+
+    document.getElementById("assets-list").innerHTML = `
+        <div class="asset-card">
+            <div>HEIZO</div>
+            <div>12.00</div>
+        </div>
+
+        <div class="asset-card">
+            <div>WLD</div>
+            <div>5.50</div>
+        </div>
+    `;
+
+}
+
+loadAssets();
+
 function openTokenModal(button){
     currentTokenButton = button;
     document.getElementById("token-modal").style.display = "flex";
