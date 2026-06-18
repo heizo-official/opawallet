@@ -931,9 +931,12 @@ async function loadAssets(){
             );
 
         const data =
-            await response.json();
+    await response.json();
 
-        console.log(data);
+document.getElementById("assets-list").innerHTML =
+    "<pre>" +
+    JSON.stringify(data, null, 2) +
+    "</pre>";
 
     }catch(error){
 
