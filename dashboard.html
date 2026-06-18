@@ -933,10 +933,7 @@ async function loadAssets(){
         const data =
     await response.json();
 
-document.getElementById("assets-list").innerHTML =
-    "<pre>" +
-    JSON.stringify(data, null, 2) +
-    "</pre>";
+console.log(data);
 
     }catch(error){
 
