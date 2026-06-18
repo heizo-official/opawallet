@@ -915,31 +915,16 @@ if(savedAddress){
 
 async function loadAssets(){
 
-    const address =
-        localStorage.getItem("walletAddress");
-
-    if(!address){
-        return;
-    }
-
-    try{
-
-        const response =
-            await fetch(
-                "https://worldchain-mainnet.g.alchemy.com/v2/demo/getTokens?address="
-                + address
-            );
-
-        const data =
-    await response.json();
-
-console.log(data);
-
-    }catch(error){
-
-        console.log(error);
-
-    }
+    document.getElementById("assets-list").innerHTML = `
+        <div class="asset-card">
+            <div>
+                <div class="asset-name">World Assets</div>
+                <div class="asset-symbol">
+                    Asset loading will be available soon
+                </div>
+            </div>
+        </div>
+    `;
 
 }
 
