@@ -85,6 +85,10 @@ MiniKit.install();
 
 <script>
 
+if(localStorage.getItem("opaLogged") === "true"){
+    window.location.href = "dashboard.html";
+}
+
 document.getElementById("loginBtn").addEventListener("click", async () => {
 
     if (typeof MiniKit === "undefined") {
