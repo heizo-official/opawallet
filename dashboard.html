@@ -913,9 +913,37 @@ if(savedAddress){
         "Connected";
 }
 
-function loadAssets(){
+async function loadAssets(){
+
+    const address =
+        localStorage.getItem("walletAddress");
+
+    if(!address){
+        return;
+    }
+
+    try{
+
+        const response =
+            await fetch(
+                "https://worldchain-mainnet.g.alchemy.com/v2/demo/getTokens?address="
+                + address
+            );
+
+        const data =
+            await response.json();
+
+        console.log(data);
+
+    }catch(error){
+
+        console.log(error);
+
+    }
 
 }
+
+loadAssets();
 
 function openTokenModal(button){
     currentTokenButton = button;
