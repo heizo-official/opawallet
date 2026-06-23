@@ -932,6 +932,8 @@ const response = await fetch(
 
 const data = await response.json();
 
+alert("TOKENS RECIBIDOS: " + data.assets.length);
+
 if(!data.success){
 return;
 }
