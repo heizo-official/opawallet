@@ -944,7 +944,16 @@ data.assets
 document.getElementById("assets-list").innerHTML =
 assets.map(asset => `
 
-<div class="token-item wallet-token">
+<div
+class="token-item wallet-token"
+onclick="openTokenDetails(this)"
+data-symbol="${asset.symbol}"
+data-price="${asset.price}"
+data-balance="${asset.balance}"
+data-address="${asset.contract}"
+data-value="${asset.usdValue}"
+data-change="${asset.change24h}"
+>
 
     <div class="token-left">
 
@@ -1056,19 +1065,6 @@ function swapTokens(){
     tokenButtons[1].innerHTML =
         topToken;
 }
-
-document.addEventListener("DOMContentLoaded", () => {
-
-    document.querySelectorAll(".token-item")
-        .forEach(token => {
-
-     token.addEventListener("click", () => {
-    openTokenDetails(token);
-});
-
-        });
-
-});
 
 </script>
 
