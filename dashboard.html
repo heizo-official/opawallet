@@ -944,34 +944,40 @@ data.assets
 document.getElementById("assets-list").innerHTML =
 assets.map(asset => `
 
-<div class="asset-card">
+<div class="token-item wallet-token">
 
-    <div>
+    <div class="token-left">
 
-        <div class="asset-name">
-            ${asset.symbol}
+        <div class="token-icon">
+            ${asset.symbol.substring(0,1)}
         </div>
 
-        <div class="asset-symbol">
-            ${asset.balance.toLocaleString()}
+        <div>
+
+            <div class="token-name">
+                ${asset.symbol}
+            </div>
+
+            <div class="token-network">
+                ${asset.balance.toLocaleString()}
+            </div>
+
         </div>
 
     </div>
 
     <div style="text-align:right;">
 
-        <div class="asset-value">
+        <div class="token-balance">
             $${asset.usdValue.toFixed(2)}
         </div>
 
-        <div class="asset-change ${
-            asset.change24h >= 0
-            ? "positive"
-            : "negative"
-        }">
-
+        <div style="
+            font-size:13px;
+            color:${asset.change24h >= 0 ? '#00a86b' : '#ff4d4f'};
+            font-weight:600;
+        ">
             ${asset.change24h.toFixed(2)}%
-
         </div>
 
     </div>
