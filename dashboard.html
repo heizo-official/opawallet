@@ -1149,6 +1149,21 @@ document.getElementById("detail-liquidity").innerText =
 document.getElementById("detail-volume").innerText =
     "$" + formatCompact(token.dataset.volume);
 
+    const address =
+    token.dataset.address || "";
+
+document.getElementById(
+    "detail-token-address-text"
+).innerText =
+    address.slice(0,6) +
+    "..." +
+    address.slice(-4);
+
+document.getElementById(
+    "detail-token-address-text"
+).dataset.fullAddress =
+    address;
+
     document.getElementById("detail-token-balance").innerText =
         Number(token.dataset.balance || 0).toLocaleString();
 
