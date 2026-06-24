@@ -932,6 +932,9 @@ const response = await fetch(
 
 const data = await response.json();
 
+alert("success=" + data.success);
+alert("assets=" + data.assets.length);
+
 if(!data.success){
 return;
 }
