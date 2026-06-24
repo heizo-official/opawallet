@@ -1178,6 +1178,44 @@ function closeTokenDetails(){
     document.getElementById("token-details-modal").style.display = "none";
 }
 
+async function copyContract(){
+
+    const element =
+        document.getElementById(
+            "detail-token-address-text"
+        );
+
+    const address =
+        element.dataset.fullAddress;
+
+    if(!address) return;
+
+    try{
+
+        await navigator.clipboard.writeText(address);
+
+        const btn =
+            document.getElementById(
+                "copy-contract-btn"
+            );
+
+        const original =
+            btn.innerHTML;
+
+        btn.innerHTML = "✓";
+
+        setTimeout(()=>{
+            btn.innerHTML = original;
+        },1200);
+
+    }catch(error){
+
+        console.error(error);
+
+    }
+
+}
+
 async function loadTokenData(symbol){
 
     console.log("Buscando:", symbol);
