@@ -930,7 +930,11 @@ const response = await fetch(
 `https://opawallet-portfolio.heizoai.workers.dev/assets?address=${address}`
 );
 
+alert("Response OK: " + response.ok);
+
 const data = await response.json();
+
+alert("Success: " + data.success);
 
 if(!data.success){
 return;
