@@ -1031,15 +1031,32 @@ function selectToken(token){
 
 function openTokenDetails(token){
 
-    const symbol = token.dataset.symbol || "TOKEN";
-
     document.getElementById("detail-token-name").innerText =
-        symbol;
+        token.dataset.symbol || "";
+
+    document.getElementById("detail-token-price").innerText =
+        "$" + Number(token.dataset.price || 0).toFixed(6);
+
+    document.getElementById("detail-marketcap").innerText =
+        "$" + Number(token.dataset.marketcap || 0).toLocaleString();
+
+    document.getElementById("detail-liquidity").innerText =
+        "$" + Number(token.dataset.liquidity || 0).toLocaleString();
+
+    document.getElementById("detail-volume").innerText =
+        "$" + Number(token.dataset.volume || 0).toLocaleString();
+
+    document.getElementById("detail-token-address").innerText =
+        token.dataset.address || "";
+
+    document.getElementById("detail-token-balance").innerText =
+        Number(token.dataset.balance || 0).toLocaleString();
+
+    document.getElementById("swap-token-name").innerText =
+        token.dataset.symbol || "";
 
     document.getElementById("token-details-modal").style.display =
         "flex";
-
-    loadTokenData(symbol);
 }
 
 function closeTokenDetails(){
