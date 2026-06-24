@@ -1026,6 +1026,25 @@ function selectToken(token){
     closeTokenModal();
 }
 
+function formatCompact(value){
+
+    value = Number(value || 0);
+
+    if(value >= 1000000000){
+        return (value / 1000000000).toFixed(1).replace(".0","") + "B";
+    }
+
+    if(value >= 1000000){
+        return (value / 1000000).toFixed(1).replace(".0","") + "M";
+    }
+
+    if(value >= 1000){
+        return (value / 1000).toFixed(1).replace(".0","") + "K";
+    }
+
+    return value.toFixed(0);
+}
+
 function openTokenDetails(token){
 
     document.getElementById("detail-token-name").innerText =
