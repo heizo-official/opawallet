@@ -1054,13 +1054,13 @@ function openTokenDetails(token){
         "$" + Number(token.dataset.price || 0).toFixed(6);
 
     document.getElementById("detail-marketcap").innerText =
-        "$" + Number(token.dataset.marketcap || 0).toLocaleString();
+    "$" + formatCompact(token.dataset.marketcap);
 
-    document.getElementById("detail-liquidity").innerText =
-        "$" + Number(token.dataset.liquidity || 0).toLocaleString();
+document.getElementById("detail-liquidity").innerText =
+    "$" + formatCompact(token.dataset.liquidity);
 
-    document.getElementById("detail-volume").innerText =
-        "$" + Number(token.dataset.volume || 0).toLocaleString();
+document.getElementById("detail-volume").innerText =
+    "$" + formatCompact(token.dataset.volume);
 
     document.getElementById("detail-token-address").innerText =
         token.dataset.address || "";
