@@ -620,8 +620,52 @@ border-top:1px solid #e5e5e5;
 }
 
 #detail-token-address{
-    font-size:18px;
+
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+
+    background:#f7f7f8;
+
+    border:1px solid #ececec;
+
+    border-radius:14px;
+
+    padding:12px 14px;
+
+    font-size:14px;
     font-weight:500;
+
+    gap:10px;
+}
+
+.copy-btn{
+
+    display:flex;
+    align-items:center;
+    justify-content:center;
+
+    width:34px;
+    height:34px;
+
+    border:none;
+
+    border-radius:10px;
+
+    background:white;
+
+    color:#555;
+
+    cursor:pointer;
+
+    flex-shrink:0;
+}
+
+.copy-btn:active{
+
+    transform:scale(.95);
+
+    background:#f0f0f0;
 }
 
 #detail-token-balance{
