@@ -1149,9 +1149,6 @@ document.getElementById("detail-liquidity").innerText =
 document.getElementById("detail-volume").innerText =
     "$" + formatCompact(token.dataset.volume);
 
-    document.getElementById("detail-token-address").innerText =
-        token.dataset.address || "";
-
     document.getElementById("detail-token-balance").innerText =
         Number(token.dataset.balance || 0).toLocaleString();
 
