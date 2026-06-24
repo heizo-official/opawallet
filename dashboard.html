@@ -941,6 +941,8 @@ data.assets
 .filter(asset => asset.balance > 0)
 .sort((a,b) => b.usdValue - a.usdValue);
 
+alert("Assets encontrados: " + assets.length);
+
 document.getElementById("assets-list").innerHTML =
 assets.map(asset => `
 
@@ -996,8 +998,10 @@ data-change="${asset.change24h}"
 `).join("");
 
 }catch(error){
-    
+
 console.error(error);
+
+alert(error.message);
 
 }
 
