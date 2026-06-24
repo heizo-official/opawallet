@@ -1050,13 +1050,51 @@ function formatCompact(value){
     return value.toFixed(0);
 }
 
+function formatPrice(price){
+
+    price = Number(price || 0);
+
+    if(price < 0.0001 && price > 0){
+
+        const str = price.toFixed(20);
+
+        const match = str.match(/^0\.(0+)(\d+)/);
+
+        if(match){
+
+            const zeroCount = match[1].length;
+
+            const digits =
+                match[2]
+                .replace(/0+$/,"")
+                .substring(0,4);
+
+            return `0.0<span class="zero-count">${zeroCount}</span>${digits}`;
+        }
+    }
+
+    if(price < 0.001){
+        return price.toFixed(5);
+    }
+
+    if(price < 1){
+        return price.toFixed(4);
+    }
+
+    if(price < 10000){
+        return price.toFixed(2);
+    }
+
+    return Math.round(price).toLocaleString();
+}
+
 function openTokenDetails(token){
 
     document.getElementById("detail-token-name").innerText =
         token.dataset.symbol || "";
 
-    document.getElementById("detail-token-price").innerText =
-        "$" + Number(token.dataset.price || 0).toFixed(6);
+    document.getElementById("detail-token-price").innerHTML =
+    "$" + formatPrice(token.dataset.price);
 
     document.getElementById("detail-marketcap").innerText =
     "$" + formatCompact(token.dataset.marketcap);
