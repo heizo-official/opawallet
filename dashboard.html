@@ -1153,8 +1153,24 @@ onerror="this.remove();this.parentNode.innerHTML='${asset.symbol.substring(0,1)}
 `).join("");
 
 }catch(error){
-    
+
 console.error(error);
+
+}
+
+finally{
+
+refreshing = false;
+
+refreshIndicator.classList.remove("loading");
+
+refreshIndicator.classList.remove("active");
+
+assetsList.style.transition =
+"transform .25s ease";
+
+assetsList.style.transform =
+"translateY(0px)";
 
 }
 
