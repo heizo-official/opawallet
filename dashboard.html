@@ -734,10 +734,11 @@ vertical-align:sub;
 }
 
 #refresh-indicator{
-    position:absolute;
+
+    position:fixed;
 
     left:50%;
-    top:-30px;
+    top:165px;
 
     transform:translateX(-50%);
 
@@ -754,11 +755,11 @@ vertical-align:sub;
     opacity:0;
 
     transition:
-        top .25s,
-        opacity .25s,
-        transform .25s;
+        opacity .25s;
 
     pointer-events:none;
+
+    z-index:9999;
 }
 
 #refresh-indicator.spinning{
@@ -822,15 +823,11 @@ Send
 Assets
 </div>
 
-<div id="pull-refresh">
-
-    <div id="refresh-indicator">
-        ↻
-    </div>
-
-    <div id="assets-list"></div>
-
+<div id="refresh-indicator">
+    ↻
 </div>
+
+<div id="assets-list"></div>
 
 </div>
 
@@ -1175,9 +1172,6 @@ pullRefresh.addEventListener("touchmove",(e)=>{
 
     refreshIndicator.style.opacity = "1";
 
-    refreshIndicator.style.top =
-        (move - 120) + "px";
-
 });
 
 pullRefresh.addEventListener("touchend", async ()=>{
@@ -1208,7 +1202,6 @@ pullRefresh.addEventListener("touchend", async ()=>{
     document.getElementById("assets-list").style.transform =
         "translateY(0px)";
 
-    refreshIndicator.style.top = "-60px";
     refreshIndicator.style.opacity = "0";
 
     setTimeout(()=>{
