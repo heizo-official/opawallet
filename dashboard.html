@@ -1196,11 +1196,16 @@ pullRefresh.addEventListener("touchend", async ()=>{
 
     if(current >= 90){
 
-        refreshIndicator.classList.add("spinning");
+    document.getElementById("assets-list").style.transform =
+        "translateY(120px)";
 
-        await loadAssets();
+    refreshIndicator.style.top = "18px";
 
-        refreshIndicator.classList.remove("spinning");
+    refreshIndicator.classList.add("spinning");
+
+    await loadAssets();
+
+    refreshIndicator.classList.remove("spinning");
 
     }
 
