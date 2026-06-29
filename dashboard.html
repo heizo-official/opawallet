@@ -1136,6 +1136,35 @@ console.error(error);
 
 loadAssets();
 
+let startY = 0;
+let pulling = false;
+
+const pullRefresh =
+document.getElementById("pull-refresh");
+
+const refreshIndicator =
+document.getElementById("refresh-indicator");
+
+pullRefresh.addEventListener("touchstart",(e)=>{
+
+    if(window.scrollY > 0) return;
+
+    startY = e.touches[0].clientY;
+    pulling = true;
+
+});
+
+pullRefresh.addEventListener("touchmove",(e)=>{
+
+    if(!pulling) return;
+
+    const distance =
+    e.touches[0].clientY - startY;
+
+    console.log(distance);
+
+});
+
 function openTokenModal(button){
     currentTokenButton = button;
     document.getElementById("token-modal").style.display = "flex";
