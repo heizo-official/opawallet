@@ -1177,9 +1177,6 @@ pullRefresh.addEventListener("touchmove",(e)=>{
 
     refreshIndicator.style.opacity = "1";
 
-    refreshIndicator.style.top =
-        (move - 120) + "px";
-
 });
 
 pullRefresh.addEventListener("touchend", async ()=>{
@@ -1199,8 +1196,6 @@ pullRefresh.addEventListener("touchend", async ()=>{
     document.getElementById("assets-list").style.transform =
         "translateY(120px)";
 
-    refreshIndicator.style.top = "18px";
-
     refreshIndicator.classList.add("spinning");
 
     await loadAssets();
@@ -1218,8 +1213,7 @@ pullRefresh.addEventListener("touchend", async ()=>{
         "translateY(0px)";
 
 },100);
-
-    refreshIndicator.style.top = "-60px";
+    
     refreshIndicator.style.opacity = "0";
 
     setTimeout(()=>{
