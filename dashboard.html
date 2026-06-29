@@ -1051,6 +1051,15 @@ if(savedAddress){
 
 async function loadAssets(){
 
+if(refreshing){
+return;
+}
+
+refreshing = true;
+
+refreshIndicator.classList.add("loading");
+refreshIndicator.classList.add("active");
+
 const address =
 localStorage.getItem("walletAddress");
 
