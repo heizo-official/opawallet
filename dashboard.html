@@ -722,6 +722,58 @@ font-size:0.65em;
 vertical-align:sub;
 }
 
+#refresh-indicator{
+
+position:fixed;
+
+left:50%;
+
+transform:translateX(-50%);
+
+top:205px;
+
+width:40px;
+height:40px;
+
+display:flex;
+
+align-items:center;
+justify-content:center;
+
+opacity:0;
+
+pointer-events:none;
+
+transition:.25s;
+
+z-index:999;
+
+}
+
+#refresh-indicator.active{
+
+opacity:1;
+
+}
+
+#refresh-indicator.loading svg{
+
+animation:spin .8s linear infinite;
+
+}
+
+@keyframes spin{
+
+from{
+transform:rotate(0deg);
+}
+
+to{
+transform:rotate(360deg);
+}
+
+}
+
 </style>
 </head>
 
@@ -763,6 +815,32 @@ Send
 
 <div class="section-title">
 Assets
+</div>
+
+<div id="refresh-indicator">
+
+<svg
+width="26"
+height="26"
+viewBox="0 0 24 24">
+
+<path
+d="M21 12a9 9 0 1 1-2.64-6.36"
+fill="none"
+stroke="#444"
+stroke-width="2"
+stroke-linecap="round"/>
+
+<polyline
+points="21 3 21 9 15 9"
+fill="none"
+stroke="#444"
+stroke-width="2"
+stroke-linecap="round"
+stroke-linejoin="round"/>
+
+</svg>
+
 </div>
 
 <div id="assets-list"></div>
