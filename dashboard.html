@@ -1176,6 +1176,45 @@ pullRefresh.addEventListener("touchmove",(e)=>{
 
 });
 
+pullRefresh.addEventListener("touchend", async ()=>{
+
+    pulling = false;
+
+    const current =
+        parseFloat(
+            document.getElementById("assets-list")
+            .style.transform
+            .replace("translateY(","")
+            .replace("px)","")
+        ) || 0;
+
+    if(current >= 90){
+
+        refreshIndicator.classList.add("spinning");
+
+        await loadAssets();
+
+        refreshIndicator.classList.remove("spinning");
+
+    }
+
+    document.getElementById("assets-list").style.transition =
+        "transform .25s ease";
+
+    document.getElementById("assets-list").style.transform =
+        "translateY(0px)";
+
+    refreshIndicator.style.top = "-60px";
+    refreshIndicator.style.opacity = "0";
+
+    setTimeout(()=>{
+
+        document.getElementById("assets-list").style.transition = "";
+
+    },250);
+
+});
+
 function openTokenModal(button){
     currentTokenButton = button;
     document.getElementById("token-modal").style.display = "flex";
