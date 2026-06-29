@@ -1190,6 +1190,86 @@ document.getElementById("assets-list");
 const refreshIndicator =
 document.getElementById("refresh-indicator");
 
+const REFRESH_DISTANCE = 150;
+
+document.addEventListener("touchstart",(e)=>{
+
+if(refreshing) return;
+
+if(window.scrollY > 0) return;
+
+startY = e.touches[0].clientY;
+
+pulling = true;
+
+assetsList.style.transition = "none";
+
+});
+
+document.addEventListener("touchmove",(e)=>{
+
+if(!pulling) return;
+
+const distance =
+e.touches[0].clientY - startY;
+
+if(distance <= 0) return;
+
+const offset =
+Math.min(distance,180);
+
+assetsList.style.transform =
+`translateY(${offset}px)`;
+
+refreshIndicator.style.transform =
+`translateX(-50%) translateY(${offset-30}px)`;
+
+if(offset >= REFRESH_DISTANCE){
+
+refreshIndicator.classList.add("active");
+
+}else{
+
+refreshIndicator.classList.remove("active");
+
+}
+
+});
+
+document.addEventListener("touchend",async()=>{
+
+if(!pulling) return;
+
+pulling = false;
+
+const matrix =
+new WebKitCSSMatrix(
+getComputedStyle(assetsList).transform
+);
+
+const offset = matrix.m42;
+
+if(offset >= REFRESH_DISTANCE){
+
+await loadAssets();
+
+}else{
+
+assetsList.style.transition =
+"transform .25s ease";
+
+assetsList.style.transform =
+"translateY(0px)";
+
+refreshIndicator.classList.remove("active");
+
+refreshIndicator.style.transform =
+"translateX(-50%)";
+
+}
+
+});
+
 function openTokenModal(button){
     currentTokenButton = button;
     document.getElementById("token-modal").style.display = "flex";
