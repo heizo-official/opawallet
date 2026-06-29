@@ -1153,6 +1153,18 @@ console.error(error);
 
 loadAssets();
 
+let startY = 0;
+
+let pulling = false;
+
+let refreshing = false;
+
+const assetsList =
+document.getElementById("assets-list");
+
+const refreshIndicator =
+document.getElementById("refresh-indicator");
+
 function openTokenModal(button){
     currentTokenButton = button;
     document.getElementById("token-modal").style.display = "flex";
