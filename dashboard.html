@@ -1209,11 +1209,15 @@ pullRefresh.addEventListener("touchend", async ()=>{
 
     }
 
+    setTimeout(()=>{
+
     document.getElementById("assets-list").style.transition =
         "transform .25s ease";
 
     document.getElementById("assets-list").style.transform =
         "translateY(0px)";
+
+},100);
 
     refreshIndicator.style.top = "-60px";
     refreshIndicator.style.opacity = "0";
