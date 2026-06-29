@@ -734,10 +734,10 @@ vertical-align:sub;
 }
 
 #refresh-indicator{
-    position:fixed;
+    position:absolute;
 
     left:50%;
-    top:88px;
+    top:-30px;
 
     transform:translateX(-50%);
 
@@ -822,11 +822,11 @@ Send
 Assets
 </div>
 
-<div id="refresh-indicator">
-    ↻
-</div>
-
 <div id="pull-refresh">
+
+    <div id="refresh-indicator">
+        ↻
+    </div>
 
     <div id="assets-list"></div>
 
@@ -1173,6 +1173,9 @@ pullRefresh.addEventListener("touchmove",(e)=>{
     document.getElementById("assets-list").style.transform =
         `translateY(${move}px)`;
 
+    refreshIndicator.style.top =
+    (move - 120) + "px";
+
     refreshIndicator.style.opacity = "1";
 
 });
@@ -1204,7 +1207,8 @@ pullRefresh.addEventListener("touchend", async ()=>{
 
     document.getElementById("assets-list").style.transform =
         "translateY(0px)";
-
+    
+    refreshIndicator.style.top = "-60px";
     refreshIndicator.style.opacity = "0";
 
     setTimeout(()=>{
