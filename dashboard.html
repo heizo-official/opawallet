@@ -1159,9 +1159,20 @@ pullRefresh.addEventListener("touchmove",(e)=>{
     if(!pulling) return;
 
     const distance =
-    e.touches[0].clientY - startY;
+        e.touches[0].clientY - startY;
 
-    console.log(distance);
+    if(distance <= 0) return;
+
+    const move =
+        Math.min(distance * 0.6, 130);
+
+    document.getElementById("assets-list").style.transform =
+        `translateY(${move}px)`;
+
+    refreshIndicator.style.opacity = "1";
+
+    refreshIndicator.style.top =
+        (move - 50) + "px";
 
 });
 
