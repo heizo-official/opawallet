@@ -1255,3 +1255,173 @@ function swapTokens(){
 
     tokenButtons[0].innerHTML =
         bottomToken;
+
+    tokenButtons[1].innerHTML =
+        topToken;
+}
+
+</script>
+
+<div id="token-details-modal"
+     class="token-modal"
+     style="display:none;"
+     onclick="closeTokenDetails()">
+
+    <div class="token-modal-content"
+         onclick="event.stopPropagation()">
+
+        <div class="token-modal-header">
+
+            <div class="token-modal-title">
+                Token Details
+            </div>
+
+            <button class="token-close-btn"
+                    onclick="closeTokenDetails()">
+                ✕
+            </button>
+
+        </div>
+
+        <div id="token-details-content">
+
+    <div class="token-details-top">
+
+        <div class="token-details-left">
+
+        <div class="token-icon"></div>
+
+     <div id="detail-token-name"></div>
+
+        </div>
+
+  <div id="detail-token-price"></div>
+
+    </div>
+
+        <div class="token-chart">
+
+    <div class="chart-buttons">
+
+        <button class="chart-btn active">1H</button>
+
+        <button class="chart-btn">1D</button>
+
+        <button class="chart-btn">1W</button>
+
+    </div>
+
+    <div class="chart-placeholder">
+
+        Chart
+
+    </div>
+
+</div>
+
+<div class="token-stats">
+
+    <div class="token-stat">
+
+        <div class="stat-label">
+            Market Cap
+        </div>
+
+    <div id="detail-marketcap"></div>
+
+    </div>
+
+    <div class="token-stat">
+
+        <div class="stat-label">
+            Liquidity
+        </div>
+
+    <div id="detail-liquidity"></div>
+
+    </div>
+
+    <div class="token-stat">
+
+        <div class="stat-label">
+            Volume
+        </div>
+
+   <div id="detail-volume"></div>
+
+    </div>
+
+</div>
+
+    <div class="token-extra-info">
+
+    <div class="token-address-box">
+        <div class="token-extra-label">
+            Address
+        </div>
+
+   <div id="detail-token-address">
+
+    <span id="detail-token-address-text"></span>
+
+    <button
+        class="copy-btn"
+        onclick="copyContract(event)">
+
+        <svg
+        width="18"
+        height="18"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round">
+
+            <rect
+            x="9"
+            y="9"
+            width="13"
+            height="13"
+            rx="2"
+            ry="2">
+            </rect>
+
+            <path
+            d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1">
+            </path>
+
+        </svg>
+
+    </button>
+
+   </div>
+    </div>
+
+    <div class="token-balance-box">
+        <div class="token-extra-label">
+            Balance
+        </div>
+
+   <div id="detail-token-balance"></div>
+    </div>
+
+    </div>
+
+            <div class="token-action">
+
+    <button id="detail-swap-btn">
+        Swap
+    <span id="swap-token-name"></span>
+    </button>
+
+            </div>
+
+            </div>
+
+    </div>
+
+</div>
+
+</body>
+</html>
