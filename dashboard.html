@@ -1550,6 +1550,77 @@ function swapTokens(){
         topToken;
 }
 
+function openReceiveModal(){
+
+    const address =
+        localStorage.getItem("walletAddress") || "";
+
+    document.getElementById(
+        "receive-address-text"
+    ).innerText =
+        address.slice(0,6) +
+        "..." +
+        address.slice(-4);
+
+    document.getElementById(
+        "receive-address-text"
+    ).dataset.fullAddress =
+        address;
+
+    document.getElementById(
+        "receive-modal"
+    ).style.display = "flex";
+
+}
+
+function closeReceiveModal(){
+
+    document.getElementById(
+        "receive-modal"
+    ).style.display = "none";
+
+}
+
+async function copyWalletAddress(){
+
+    const element =
+        document.getElementById(
+            "receive-address-text"
+        );
+
+    const address =
+        element.dataset.fullAddress;
+
+    if(!address) return;
+
+    try{
+
+        await navigator.clipboard.writeText(address);
+
+        const btn =
+            document.getElementById(
+                "copy-wallet-btn"
+            );
+
+        const original =
+            btn.innerHTML;
+
+        btn.innerHTML = "✓";
+
+        setTimeout(()=>{
+
+            btn.innerHTML = original;
+
+        },1200);
+
+    }catch(error){
+
+        console.error(error);
+
+    }
+
+}
+
 </script>
 
 <div id="token-details-modal"
