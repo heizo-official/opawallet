@@ -1569,6 +1569,15 @@ function openReceiveModal(){
     ).dataset.fullAddress =
         address;
 
+    QRCode.toCanvas(
+    document.getElementById("wallet-qr"),
+    address,
+    {
+        width:220,
+        margin:1
+    }
+);
+
     document.getElementById(
         "receive-modal"
     ).style.display = "flex";
