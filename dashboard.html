@@ -1290,6 +1290,8 @@ loadMarkets();
 
 async function loadMarkets(){
 
+console.log("loadMarkets ejecutándose");
+
 const address =
 localStorage.getItem("walletAddress");
 
@@ -1304,6 +1306,8 @@ const response = await fetch(
 );
 
 const data = await response.json();
+
+console.log(data);
 
 if(!data.success){
 return;
