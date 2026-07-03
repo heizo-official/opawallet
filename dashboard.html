@@ -1295,8 +1295,6 @@ loadMarkets();
 
 async function loadMarkets(){
 
-alert("loadMarkets ejecutándose");
-
 const address =
 localStorage.getItem("walletAddress");
 
@@ -1310,14 +1308,7 @@ const response = await fetch(
 `https://opawallet-api.heizoai.workers.dev/markets?address=${address}`
 );
 
-alert("Status: " + response.status);
-
 const data = await response.json();
-
-alert(
-"success: " + data.success +
-"\nmarkets: " + (data.markets ? data.markets.length : "NO EXISTE")
-);
 
 if(!data.success){
 return;
