@@ -1299,6 +1299,21 @@ loadAssets();
 
 loadMarkets();
 
+window.swapTokensList = [];
+
+fetch(
+`${SWAP_API}?address=${localStorage.getItem("walletAddress")}`
+)
+.then(r=>r.json())
+.then(data=>{
+
+window.swapTokensList = [
+...data.buy,
+...data.sell
+];
+
+});
+
 async function loadMarkets(){
 
 const address =
