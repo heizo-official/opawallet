@@ -940,9 +940,10 @@ Assets
     <div class="swap-top">
 
         <input
-        type="number"
-        class="swap-amount"
-        placeholder="0">
+type="number"
+class="swap-amount"
+placeholder="0"
+oninput="clearTimeout(swapQuoteTimer);swapQuoteTimer=setTimeout(updateSwapQuote,500)">
 
         <button class="token-select" onclick="openTokenModal(this)">
            Select ▼
