@@ -1640,6 +1640,63 @@ async function loadTokenData(symbol){
 
 }
 
+async function updateSwapQuote(){
+
+const address =
+localStorage.getItem("walletAddress");
+
+if(!address) return;
+
+const buttons =
+document.querySelectorAll(".token-select");
+
+const amounts =
+document.querySelectorAll(".swap-amount");
+
+if(buttons.length < 2 || amounts.length < 2) return;
+
+const fromSymbol =
+buttons[0].innerText.replace("▼","").trim();
+
+const toSymbol =
+buttons[1].innerText.replace("▼","").trim();
+
+const amount =
+Number(amounts[0].value);
+
+if(!amount) return;
+
+const fromToken =
+window.swapTokensList.find(
+t=>t.symbol===fromSymbol
+);
+
+const toToken =
+window.swapTokensList.find(
+t=>t.symbol===toSymbol
+);
+
+if(!fromToken || !toToken) return;
+
+const response =
+await fetch(
+`${SWAP_API}?address=${address}&from=${fromToken.address}&to=${toToken.address}&amount=${amount}`
+);
+
+swapQuote =
+await response.json();
+
+if(
+swapQuote.success
+){
+
+amounts[1].value =
+swapQuote.amountOut;
+
+}
+
+}
+
 function swapTokens(){
 
     const tokenButtons =
