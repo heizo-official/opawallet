@@ -1975,17 +1975,11 @@ async function executeSwap(quoteData) {
         }
     );
 
-    const data = await response.json();
+    const text = await response.text();
 
-    alert(
-        JSON.stringify(
-            data,
-            null,
-            2
-        )
-    );
+    alert(text);
 
-    return data;
+    return JSON.parse(text);
 
 }
 
