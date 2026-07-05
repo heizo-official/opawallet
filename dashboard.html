@@ -1928,7 +1928,7 @@ if (!ejecutar) {
     return;
 }
 
-const swapResult = await executeSwap(data);
+const swapResult = await executeSwap(data.quote);
 
 console.log(swapResult);
 
@@ -1959,7 +1959,15 @@ async function executeSwap(quoteData) {
             headers: {
                 "Content-Type": "application/json"
             },
-            body: JSON.stringify(quoteData)
+            body: JSON.stringify({
+    ...quoteData,
+    integratorFees: [
+        {
+            recipient: "0x518D2B293B86DFda892eA82b4ebf23842d25B9b9",
+            bips: 40
+        }
+    ]
+})
         }
     );
 
