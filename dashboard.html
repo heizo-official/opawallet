@@ -1913,26 +1913,11 @@ async function testQuote(){
         }
 
         alert(
-`Amount Out:
-${data.amountOut}
-
-Worker:
-${data.workerVersion}
-
-Minimum:
-${data.minimumReceived}
-
-Gas USD:
-${data.gasFeeUSD}
-
-Price Impact:
-${data.priceImpact}%
-
-Integrator Fee:
-${data.integratorFee?.bips} bps
-
-Fee Amount:
-${data.integratorFee?.amount}`
+    JSON.stringify(
+        data,
+        null,
+        2
+    )
 );
 
 const ejecutar = confirm(
