@@ -13,6 +13,28 @@ window.MiniKit = MiniKit;
 
 MiniKit.install();
 
+async function signPermit(permitData){
+
+    if(!permitData){
+        return null;
+    }
+
+    const result = await MiniKit.signTypedData({
+
+        domain: permitData.domain,
+
+        types: permitData.types,
+
+        primaryType: "PermitSingle",
+
+        message: permitData.values
+
+    });
+
+    return result.data.signature;
+
+}
+
 </script>
 
 <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.1/dist/ethers.umd.min.js"></script>
@@ -1932,15 +1954,19 @@ Fee Amount:
 ${data.integratorFee?.amount}`
 );
 
-const ejecutar = confirm(
-    "¿Ejecutar este swap?"
+const signature =
+await signPermit(data.permitData);
+
+const swapResult =
+await executeSwap(
+
+    data.quote,
+
+    data.permitData,
+
+    signature
+
 );
-
-if (!ejecutar) {
-    return;
-}
-
-const swapResult = await executeSwap(data.quote);
 
 console.log(swapResult);
 
@@ -1962,7 +1988,15 @@ return;
 
 }
 
-async function executeSwap(quoteData) {
+async function executeSwap(
+
+    quoteData,
+
+    permitData,
+
+    signature
+
+) {
 
     const response = await fetch(
         "https://opawallet-swap-executor.heizoai.workers.dev/swap",
@@ -1972,13 +2006,13 @@ async function executeSwap(quoteData) {
                 "Content-Type": "application/json"
             },
             body: JSON.stringify({
-    ...quoteData,
-    integratorFees: [
-        {
-            recipient: "0x518D2B293B86DFda892eA82b4ebf23842d25B9b9",
-            bips: 40
-        }
-    ]
+
+    quote: quoteData,
+
+    permitData: permitData,
+
+    signature: signature
+
 })
         }
     );
