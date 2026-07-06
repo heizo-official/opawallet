@@ -67,7 +67,7 @@ const result = await MiniKit.signTypedData({
 
         alert("ERROR signTypedData");
 
-        alert(JSON.stringify(error, null, 2));
+        alert(JSON.stringify(error, Object.getOwnPropertyNames(error), 2));
 
         console.error(error);
 
