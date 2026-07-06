@@ -1911,6 +1911,29 @@ async function testQuote(){
 
     }
 
+const result =
+await MiniKit.sendTransaction({
+
+    chainId:480,
+
+    transactions:[
+
+        {
+
+            to:data.to,
+
+            data:data.calldata,
+
+            value:data.value || "0"
+
+        }
+
+    ]
+
+});
+
+console.log(result);
+    
 }
 
 </script>
