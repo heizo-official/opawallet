@@ -21,6 +21,10 @@ window.signPermit = async function(permitData){
 
         alert(JSON.stringify(permitData, null, 2));
 
+        alert(permitData.primaryType);
+
+        alert(Object.keys(permitData.types));
+
         const result = await MiniKit.signTypedData({
 
             domain: permitData.domain,
