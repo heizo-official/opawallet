@@ -33,11 +33,13 @@ window.signPermit = async function(permitData){
 
         alert("Entró a signPermit");
 
-        alert(JSON.stringify(permitData, null, 2));
+        alert("domain: " + JSON.stringify(permitData.domain));
 
-        alert(permitData.primaryType);
+        alert("primaryType: " + permitData.primaryType);
 
-        alert(Object.keys(permitData.types));
+        alert("types: " + Object.keys(permitData.types).join(","));
+
+        alert("message: " + JSON.stringify(permitData.values));
 
         const types = { ...permitData.types };
 
