@@ -13,6 +13,16 @@ window.MiniKit = MiniKit;
 
 MiniKit.install();
 
+alert(
+    MiniKit.version ||
+    MiniKit.VERSION ||
+    "sin version"
+);
+
+alert(
+    Object.keys(MiniKit).join(", ")
+);
+
 window.signPermit = async function(permitData){
 
     try{
