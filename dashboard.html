@@ -13,7 +13,7 @@ window.MiniKit = MiniKit;
 
 MiniKit.install();
 
-async function signPermit(permitData){
+window.signPermit = async function(permitData){
 
     if(!permitData){
         return null;
