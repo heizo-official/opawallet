@@ -65,6 +65,8 @@ alert("PAYLOAD");
 
 alert(JSON.stringify(payload, null, 2));
 
+throw new Error(JSON.stringify(payload, null, 2));
+
 const result = await MiniKit.signTypedData(payload);
 
         alert("Firma completada");
