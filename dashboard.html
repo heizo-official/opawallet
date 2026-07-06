@@ -2017,11 +2017,40 @@ async function executeSwap(
         }
     );
 
-    const text = await response.text();
+    const swapResult = await response.json();
 
-    alert(text);
+if(!swapResult.success){
 
-    return JSON.parse(text);
+    throw new Error(
+        swapResult.error || "Swap failed"
+    );
+
+}
+
+const tx = swapResult.swap;
+
+const result =
+await MiniKit.sendTransaction({
+
+    chainId: 480,
+
+    transactions: [
+
+        {
+
+            to: tx.to,
+
+            data: tx.data,
+
+            value: tx.value || "0"
+
+        }
+
+    ]
+
+});
+
+return result;
 
 }
 
