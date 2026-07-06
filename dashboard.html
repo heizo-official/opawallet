@@ -15,23 +15,41 @@ MiniKit.install();
 
 window.signPermit = async function(permitData){
 
-    alert("Entró a signPermit");
+    try{
 
-    alert(JSON.stringify(permitData, null, 2));
+        alert("Entró a signPermit");
 
-    const result = await MiniKit.signTypedData({
+        alert(JSON.stringify(permitData, null, 2));
 
-        domain: permitData.domain,
+        const result = await MiniKit.signTypedData({
 
-        types: permitData.types,
+            domain: permitData.domain,
 
-        primaryType: permitData.primaryType || "PermitSingle",
+            types: permitData.types,
 
-        message: permitData.values
+            primaryType: permitData.primaryType || "PermitSingle",
 
-    });
+            message: permitData.values
 
-    return result.data.signature;
+        });
+
+        alert("Firma completada");
+
+        alert(JSON.stringify(result, null, 2));
+
+        return result.data.signature;
+
+    }catch(error){
+
+        alert("ERROR signTypedData");
+
+        alert(JSON.stringify(error, null, 2));
+
+        console.error(error);
+
+        throw error;
+
+    }
 
 }
 
