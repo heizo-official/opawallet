@@ -1912,7 +1912,7 @@ alert("CALLDATA");
 alert(data.calldata);
 
 alert("QUOTE KEYS");
-alert(Object.keys(data.quote || {}).join(","));
+alert(JSON.stringify(data.swapResponse, null, 2));
 
     alert("Quote recibida");
 
