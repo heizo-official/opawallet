@@ -1901,6 +1901,19 @@ async function testQuote(){
     const data =
     await response.json();
 
+    alert("RESPUESTA");
+
+alert(Object.keys(data).join(","));
+
+alert("TO");
+alert(data.to);
+
+alert("CALLDATA");
+alert(data.calldata);
+
+alert("QUOTE KEYS");
+alert(Object.keys(data.quote || {}).join(","));
+
     alert("Quote recibida");
 
     if(!response.ok){
