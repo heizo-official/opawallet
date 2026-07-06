@@ -2012,6 +2012,14 @@ async function executeSwap(
 
     const swapResult = await response.json();
 
+alert(
+    JSON.stringify(
+        swapResult,
+        null,
+        2
+    )
+);
+
 if(!swapResult.success){
 
     throw new Error(
