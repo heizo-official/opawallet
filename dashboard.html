@@ -1970,6 +1970,16 @@ return;
         const data =
         await response.json();
 
+        alert(
+JSON.stringify(
+data.permitData,
+null,
+2
+)
+);
+
+return;
+
         if(!response.ok){
 
     alert(
