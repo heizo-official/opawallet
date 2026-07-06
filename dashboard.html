@@ -25,17 +25,21 @@ window.signPermit = async function(permitData){
 
         alert(Object.keys(permitData.types));
 
-        const result = await MiniKit.signTypedData({
+        const types = { ...permitData.types };
 
-            domain: permitData.domain,
+delete types.EIP712Domain;
 
-            types: permitData.types,
+const result = await MiniKit.signTypedData({
 
-            primaryType: permitData.primaryType || "PermitSingle",
+    domain: permitData.domain,
 
-            message: permitData.values
+    types,
 
-        });
+    primaryType: "PermitSingle",
+
+    message: permitData.values
+
+});
 
         alert("Firma completada");
 
