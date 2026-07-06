@@ -15,6 +15,8 @@ MiniKit.install();
 
 window.signPermit = async function(permitData){
 
+    alert("Entró a signPermit");
+
     const result = await MiniKit.signTypedData({
 
         domain: permitData.domain,
@@ -1870,6 +1872,8 @@ async function copyWalletAddress(){
 
 async function testQuote(){
 
+    alert("Entró a testQuote");
+
     const address =
         localStorage.getItem("walletAddress");
 
@@ -1917,6 +1921,8 @@ async function testQuote(){
     const data =
     await response.json();
 
+    alert("Quote recibida");
+
     if(!response.ok){
 
         throw new Error(
@@ -1924,6 +1930,8 @@ async function testQuote(){
         );
 
     }
+
+    alert("Va a firmar");
 
     const signature =
     await signPermit(
