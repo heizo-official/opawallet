@@ -13,82 +13,6 @@ window.MiniKit = MiniKit;
 
 MiniKit.install();
 
-alert(
-    MiniKit.version ||
-    MiniKit.VERSION ||
-    "sin version"
-);
-
-alert(
-    Object.keys(MiniKit).join(", ")
-);
-
-alert(typeof MiniKit.signTypedData);
-
-alert(typeof MiniKit.sendTransaction);
-
-window.signPermit = async function(permitData){
-
-    try{
-
-        alert("Entró a signPermit");
-
-        alert("domain: " + JSON.stringify(permitData.domain));
-
-        alert("primaryType: " + permitData.primaryType);
-
-        alert("types: " + Object.keys(permitData.types).join(","));
-
-        alert("message: " + JSON.stringify(permitData.values));
-
-        const types = { ...permitData.types };
-
-delete types.EIP712Domain;
-
-alert("Existe signTypedData: " + (typeof MiniKit.signTypedData));
-
-alert("Existe commandsAsync: " + (typeof MiniKit.commandsAsync));
-
-const payload = {
-
-    domain: permitData.domain,
-
-    types,
-
-    primaryType: "PermitSingle",
-
-    message: permitData.values
-
-};
-
-alert("PAYLOAD");
-
-alert(JSON.stringify(payload, null, 2));
-
-throw new Error(JSON.stringify(payload, null, 2));
-
-const result = await MiniKit.signTypedData(payload);
-
-        alert("Firma completada");
-
-        alert(JSON.stringify(result, null, 2));
-
-        return result.data.signature;
-
-    }catch(error){
-
-        alert("ERROR signTypedData");
-
-        alert(JSON.stringify(error, Object.getOwnPropertyNames(error), 2));
-
-        console.error(error);
-
-        throw error;
-
-    }
-
-}
-
 </script>
 
 <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.1/dist/ethers.umd.min.js"></script>
@@ -1987,25 +1911,8 @@ async function testQuote(){
 
     }
 
-    alert("Va a firmar");
-
-    const signature =
-    await signPermit(
-        data.permitData
-    );
-
-    const result =
-    await executeSwap(
-
-        data.quote,
-
-        data.permitData,
-
-        signature
-
-    );
-
-    console.log(result);
+    alert(JSON.stringify(data, null, 2));
+return;
 
 }
 
