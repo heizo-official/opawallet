@@ -18,17 +18,6 @@ window.signPermit = async function(permitData){
     if(!permitData){
         return null;
     }
-
-    alert(
-JSON.stringify(
-    permitData,
-    null,
-    2
-));
-
-alert(
-    permitData.primaryType
-);
     
     const result = await MiniKit.signTypedData({
 
