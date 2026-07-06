@@ -49,7 +49,7 @@ alert("Existe signTypedData: " + (typeof MiniKit.signTypedData));
 
 alert("Existe commandsAsync: " + (typeof MiniKit.commandsAsync));
 
-const result = await MiniKit.signTypedData({
+const payload = {
 
     domain: permitData.domain,
 
@@ -59,7 +59,13 @@ const result = await MiniKit.signTypedData({
 
     message: permitData.values
 
-});
+};
+
+alert("PAYLOAD");
+
+alert(JSON.stringify(payload, null, 2));
+
+const result = await MiniKit.signTypedData(payload);
 
         alert("Firma completada");
 
