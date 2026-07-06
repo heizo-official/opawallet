@@ -13,23 +13,35 @@ window.MiniKit = MiniKit;
 
 MiniKit.install();
 
-window.signPermit = async function(permitData){
+window.signPermit = async function(){
 
-    if(!permitData){
-        return null;
-    }
-    
     const result = await MiniKit.signTypedData({
 
-        domain: permitData.domain,
+        domain:{
+            name:"Test",
+            version:"1",
+            chainId:480,
+            verifyingContract:"0x0000000000000000000000000000000000000001"
+        },
 
-        types: permitData.types,
+        types:{
+            Test:[
+                {
+                    name:"message",
+                    type:"string"
+                }
+            ]
+        },
 
-        primaryType: permitData.primaryType || "PermitSingle",
+        primaryType:"Test",
 
-        message: permitData.values
+        message:{
+            message:"Hello World"
+        }
 
     });
+
+    alert(JSON.stringify(result, null, 2));
 
     return result.data.signature;
 
