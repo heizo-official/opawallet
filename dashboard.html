@@ -1934,25 +1934,6 @@ async function testQuote(){
 
         }
 
-        alert(
-`Amount Out:
-${data.amountOut}
-
-Minimum:
-${data.minimumReceived}
-
-Gas USD:
-${data.gasFeeUSD}
-
-Price Impact:
-${data.priceImpact}%
-
-Integrator Fee:
-${data.integratorFee?.bips} bps
-
-Fee Amount:
-${data.integratorFee?.amount}`
-);
 
 const signature =
 await signPermit(data.permitData);
