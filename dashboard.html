@@ -32,7 +32,7 @@ JSON.stringify(
 
         types: permitData.types,
 
-        primaryType: "PermitSingle",
+        primaryType: permitData.primaryType || "PermitSingle",
 
         message: permitData.values
 
