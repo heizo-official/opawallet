@@ -1903,7 +1903,7 @@ async function testQuote(){
 
     alert("RESPUESTA");
 
-alert(Object.keys(data).join(","));
+alert(JSON.stringify(data, null, 2));
 
 alert("TO");
 alert(data.to);
