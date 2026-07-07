@@ -1905,6 +1905,11 @@ async function testQuote(){
 
 alert(JSON.stringify(data, null, 2));
 
+alert("METHODS");
+alert(JSON.stringify(Object.keys(data), null, 2));
+alert("QUOTE");
+alert(JSON.stringify(data.quote || data, null, 2));
+
 alert("TO");
 alert(data.to);
 
