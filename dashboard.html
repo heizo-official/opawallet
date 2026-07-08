@@ -1882,6 +1882,11 @@ async function swap(){
 
 const data = await response.json();
 
+const walletAddress =
+    localStorage.getItem("walletAddress");
+
+alert(walletAddress);
+
 alert(JSON.stringify(data, null, 2));
 
 alert(Object.keys(MiniKit).join("\n"));
