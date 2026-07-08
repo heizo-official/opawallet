@@ -1963,13 +1963,11 @@ const result = await MiniKit.sendTransaction({
     transactions: [
         {
             to: "0x000000000022D473030F116dDEE9F6B43aC78BA3",
-            data: approveData,
-            value: "0"
+            data: approveData
         },
         {
             to: "0xTU_CONTRATO_OPAWORLDSWAP",
-            data: swapData,
-            value: "0"
+            data: swapData
         }
     ]
 });
