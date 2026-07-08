@@ -1947,6 +1947,35 @@ const swapAbi = [
 }
 ];
 
+const swapData = encodeFunctionData({
+    abi: swapAbi,
+    functionName: "swap",
+    args: [
+        data.quote.input.token,
+        data.quote.output.token,
+        BigInt(data.quote.input.amount),
+        BigInt(data.quote.output.minimumAmount)
+    ]
+});
+
+const result = await MiniKit.sendTransaction({
+    chainId: 480,
+    transactions: [
+        {
+            to: "0x000000000022D473030F116dDEE9F6B43aC78BA3",
+            data: approveData,
+            value: "0"
+        },
+        {
+            to: "0xTU_CONTRATO_OPAWORLDSWAP",
+            data: swapData,
+            value: "0"
+        }
+    ]
+});
+
+alert(JSON.stringify(result, null, 2));
+
 const walletAddress =
     localStorage.getItem("walletAddress");
 
