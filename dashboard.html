@@ -1882,6 +1882,33 @@ async function swap(){
 
 const data = await response.json();
 
+const permit2ApproveAbi = [
+{
+    name: "approve",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs: [
+        {
+            name: "token",
+            type: "address"
+        },
+        {
+            name: "spender",
+            type: "address"
+        },
+        {
+            name: "amount",
+            type: "uint160"
+        },
+        {
+            name: "expiration",
+            type: "uint48"
+        }
+    ],
+    outputs: []
+}
+];
+
 const walletAddress =
     localStorage.getItem("walletAddress");
 
