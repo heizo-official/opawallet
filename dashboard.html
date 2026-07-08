@@ -1860,6 +1860,30 @@ async function copyWalletAddress(){
 
 async function swap(){
 
+    const response = await fetch(
+    "https://opawallet-swap-v2.heizoai.workers.dev",
+    {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+            type: "EXACT_INPUT",
+            amount: "1000000",
+            tokenInChainId: 480,
+            tokenOutChainId: 480,
+            tokenIn: "0x79A02482A880bCE3F13e09Da970dC34db4CD24d1",
+            tokenOut: "0x4200000000000000000000000000000000000006",
+            swapper: localStorage.getItem("walletAddress"),
+            slippageTolerance: 0.5
+        })
+    }
+);
+
+const data = await response.json();
+
+alert(JSON.stringify(data, null, 2));
+
 }
 
 </script>
