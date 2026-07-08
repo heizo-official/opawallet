@@ -1868,6 +1868,7 @@ async function swap(){
             "Content-Type": "application/json"
         },
         body: JSON.stringify({
+            action: "quote",
             type: "EXACT_INPUT",
             amount: "1000000",
             tokenInChainId: 480,
