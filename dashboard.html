@@ -992,7 +992,7 @@ oninput="clearTimeout(swapQuoteTimer);swapQuoteTimer=setTimeout(updateSwapQuote,
 
       <button
 class="swap-btn"
-onclick="testQuote()">
+onclick="swap()">
 Swap
       </button>
 
@@ -1858,25 +1858,8 @@ async function copyWalletAddress(){
 
 }
 
-async function testQuote(){
+async function swap(){
 
-    alert("Entró a testQuote");
-
-    const address =
-        localStorage.getItem("walletAddress");
-
-    if(!address){
-
-        alert("Wallet no conectada");
-
-        return;
-
-    }
-
-    alert("Vamos a cambiar al flujo del OpaSwapProxy");
-
-console.log(result);
-    
 }
 
 </script>
