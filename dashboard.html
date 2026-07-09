@@ -1889,9 +1889,11 @@ return;
 const signResult = await window.MiniKit.signTypedData({
     domain: data.permitData.domain,
     types: data.permitData.types,
-    primaryType: data.permitData.primaryType,
+    primaryType: "PermitSingle",
     message: data.permitData.values
 });
+
+alert(JSON.stringify(signResult, null, 2));
 
 alert(JSON.stringify(signResult, null, 2));
 
