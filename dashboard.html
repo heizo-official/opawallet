@@ -1883,8 +1883,9 @@ async function swap(){
 
 const data = await response.json();
 
-alert(typeof window.MiniKit);
-alert(Object.keys(window.MiniKit).join("\n"));
+alert(typeof window.MiniKit.signTypedData);
+alert(typeof window.MiniKit.sendTransaction);
+alert(typeof window.MiniKit.walletAuth);
 
 }
 
