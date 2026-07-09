@@ -1895,6 +1895,29 @@ try {
         message: data.permitData.values
     });
 
+    const swapResponse = await fetch(
+    "https://opawallet-swap-v2.heizoai.workers.dev",
+    {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+            action: "swap",
+
+            quote: data.quote,
+            permitData: data.permitData,
+
+            signature: signResult.signature,
+            requestId: data.requestId
+        })
+    }
+);
+
+const swapData = await swapResponse.json();
+
+alert(JSON.stringify(swapData, null, 2));
+
     alert(JSON.stringify(signResult, null, 2));
 
 } catch (e) {
