@@ -1883,9 +1883,6 @@ async function swap(){
 
 const data = await response.json();
 
-alert(JSON.stringify(data.permitData, null, 2));
-return;
-
 const signResult = await window.MiniKit.signTypedData({
     domain: data.permitData.domain,
     types: data.permitData.types,
