@@ -1929,6 +1929,43 @@ alert(JSON.stringify(swapData, null, 2));
 
 }
 
+async function testSignTypedData() {
+
+    try {
+
+        const result = await window.MiniKit.signTypedData({
+            domain: {
+                name: "Test",
+                version: "1",
+                chainId: 480,
+                verifyingContract: "0x0000000000000000000000000000000000000000"
+            },
+            types: {
+                Test: [
+                    {
+                        name: "value",
+                        type: "uint256"
+                    }
+                ]
+            },
+            primaryType: "Test",
+            message: {
+                value: "1"
+            }
+        });
+
+        alert(JSON.stringify(result, null, 2));
+
+    } catch (e) {
+
+        alert(JSON.stringify(e, null, 2));
+        alert(e?.message);
+        alert(e?.code);
+
+    }
+
+}
+
 </script>
 
 <div id="token-details-modal"
