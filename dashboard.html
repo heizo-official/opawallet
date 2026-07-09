@@ -1758,6 +1758,110 @@ swapQuote.amountOut;
 
 }
 
+// Conversión matemática a Wei sin depender de librerías externas (Wagmi/Ethers)
+function toWei(amountStr, decimals) {
+    let [whole, fraction = ''] = amountStr.toString().split('.');
+    if (!whole) whole = '0';
+    fraction = fraction.padEnd(decimals, '0').slice(0, decimals);
+    return BigInt(whole + fraction).toString();
+}
+
+async function procesarIntercambioReal() {
+    try {
+        // 1. Lectura dinámica de la interfaz
+        const tokenButtons = document.querySelectorAll(".token-select");
+        const amounts = document.querySelectorAll(".swap-amount");
+
+        if (tokenButtons.length < 2 || amounts.length < 1) {
+            console.error("Elementos de la interfaz no encontrados.");
+            return;
+        }
+
+        // Limpieza del texto (quitando la flecha ▼ y espacios)
+        const fromSymbol = tokenButtons[0].innerText.replace("▼", "").trim();
+        const toSymbol = tokenButtons[1].innerText.replace("▼", "").trim();
+        const amountInput = amounts[0].value;
+
+        if (!amountInput || Number(amountInput) <= 0) {
+            console.error("Ingresa una cantidad válida para intercambiar.");
+            return;
+        }
+
+        // 2. Búsqueda automática en tu lista de tokens
+        if (!window.swapTokensList) {
+            console.error("La lista de tokens window.swapTokensList no está lista.");
+            return;
+        }
+
+        const fromToken = window.swapTokensList.find(t => t.symbol === fromSymbol);
+        const toToken = window.swapTokensList.find(t => t.symbol === toSymbol);
+
+        if (!fromToken || !toToken) {
+            console.error("No se encontraron los contratos de los tokens en la lista.");
+            return;
+        }
+
+        const tokenInAddress = fromToken.address;
+        const tokenInDecimals = fromToken.decimals || 18; // Respaldo a 18 decimales
+        const tokenOutAddress = toToken.address;
+
+        // 3. Conversión de monto a Wei basado en los decimales exactos
+        const amountInWei = toWei(amountInput, tokenInDecimals);
+
+        // 4. Petición al Cloudflare Worker (Agregador 0x)
+        // Nota: Tu worker configurará el affiliateFee y feeRecipient en la URL final de 0x
+        const workerUrl = `https://TU_WORKER.workers.dev/swap?sellToken=${tokenInAddress}&buyToken=${tokenOutAddress}&sellAmount=${amountInWei}`;
+        
+        const response = await fetch(workerUrl);
+        if (!response.ok) throw new Error("Fallo en la comunicación con el Worker de 0x");
+        const swapData = await response.json();
+
+        // 0x devuelve allowanceTarget (para el approve), to (contrato ejecutor), data y value
+        const oxContractAddress = swapData.allowanceTarget || swapData.to; 
+        const swapCalldata = swapData.data; 
+        const swapValue = swapData.value || "0";
+
+        // 5. Estructuración del lote ERC-4337 (Approve + Swap)
+        const erc20ApproveAbi = [
+            {
+                "inputs": [
+                    {"name": "spender", "type": "address"},
+                    {"name": "amount", "type": "uint256"}
+                ],
+                "name": "approve",
+                "outputs": [{"name": "", "type": "bool"}],
+                "stateMutability": "nonpayable",
+                "type": "function"
+            }
+        ];
+
+        const txPayload = {
+            transactions: [
+                {
+                    address: tokenInAddress,
+                    abi: erc20ApproveAbi,
+                    functionName: "approve",
+                    args: [oxContractAddress, amountInWei]
+                },
+                {
+                    address: swapData.to,
+                    operation: "call",
+                    calldata: swapCalldata,
+                    value: swapValue
+                }
+            ]
+        };
+
+        // 6. Ejecución nativa a través del Smart Contract Wallet
+        const result = await MiniKit.commands.sendTransaction(txPayload);
+        console.log("Comando de transacción enviado a World App:", result);
+
+    } catch (error) {
+        console.error("Error al ejecutar el swap:", error);
+    }
+}
+    
+
 function swapTokens(){
 
     const tokenButtons =
