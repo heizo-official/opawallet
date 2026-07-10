@@ -1906,35 +1906,25 @@ async function procesarIntercambioReal() {
             args: [tokenInAddress, swapTargetRouter, BigInt(amountInWei), BigInt(expirationTimestamp)]
         });
 
-                // 6. CONSTRUCCIÓN DEL LOTE DE TRANSACCIONES (Multicall ERC-4337)
+                        // 6. CONSTRUCCIÓN DEL LOTE DE TRANSACCIONES (Multicall ERC-4337 oficial de MiniKit)
         const listaTransacciones = [];
 
-        // Si no es el token nativo (ETH), inyectamos ambas aprobaciones en el lote
-        if (tokenInAddress.toLowerCase() !== "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee") {
-            
-            // [PASO A] Darle custodia de los tokens a Permit2
+        // [PASO 1] Aprobación ERC20 estándar hacia el allowanceTarget (Permit2)
+        if (tokenInAddress.toLowerCase() !== "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee" && oxContractAddress) {
             listaTransacciones.push({
                 to: tokenInAddress,
                 data: approveData,
-                value: "0x0" // <- CORREGIDO: Formato Hexadecimal exigido por MiniKit
-            });
-
-            // [PASO B] Autorizar internamente dentro de Permit2 que 0x retire esos tokens
-            listaTransacciones.push({
-                to: permit2Address,
-                data: permit2Data,
-                value: "0x0" // <- CORREGIDO: Formato Hexadecimal exigido por MiniKit
+                value: "0x0"
             });
         }
 
-        // [PASO C] Agregar la transacción final del swap generada por 0x
-        // Convertimos de forma segura el value de la cotización a un string hexadecimal válido
+        // [PASO 2] Agregar la transacción de ejecución del Swap generada por 0x
         const hexValue = "0x" + BigInt(swapValue).toString(16);
 
         listaTransacciones.push({
             to: swapTargetRouter,
             data: swapCalldata,
-            value: hexValue // <- CORREGIDO: Ahora va como un string hexadecimal limpio (ej: "0x0" o "0x1a")
+            value: hexValue
         });
 
         const txPayload = {
