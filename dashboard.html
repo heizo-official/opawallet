@@ -1896,8 +1896,8 @@ async function procesarIntercambioReal() {
             args: [permit2Address, BigInt(amountInWei)]
         });
 
-        // Configuración de expiración para Permit2 (30 minutos en el futuro)
-        const expirationTimestamp = Math.floor(Date.now() / 1000) + 60;
+        // Configuración de expiración para Permit2 (2 minutos en el futuro)
+        const expirationTimestamp = Math.floor(Date.now() / 1000) + 120;
 
         // Codificación del Paso B (Permit2 Approve)
         const permit2Data = window.encodeFunctionData({
