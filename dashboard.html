@@ -1836,6 +1836,9 @@ async function procesarIntercambioReal() {
         }
 
         const swapData = JSON.parse(texto);
+
+        alert(JSON.stringify(swapData, null, 2));
+        
         const transactionData = swapData.transaction || {};
         const swapTargetRouter = transactionData.to;
 const allowanceTarget = swapData.allowanceTarget;
