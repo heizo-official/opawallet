@@ -1839,6 +1839,8 @@ const swapData = JSON.parse(texto);
         const swapCalldata = swapData.data; 
         const swapValue = swapData.value || "0";
 
+        alert(JSON.stringify(swapData, null, 2));
+
         // 5. Estructuración del lote ERC-4337 (Approve + Swap)
         const erc20ApproveAbi = [
             
