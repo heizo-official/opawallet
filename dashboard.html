@@ -1841,6 +1841,13 @@ const swapData = JSON.parse(texto);
 
         // 5. Estructuración del lote ERC-4337 (Approve + Swap)
         const erc20ApproveAbi = [
+
+            const approveData = window.encodeFunctionData({
+    abi: erc20ApproveAbi,
+    functionName: "approve",
+    args: [oxContractAddress, BigInt(amountInWei)]
+});
+            
             {
                 "inputs": [
                     {"name": "spender", "type": "address"},
