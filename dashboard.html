@@ -1906,11 +1906,14 @@ async function procesarIntercambioReal() {
             args: [tokenInAddress, swapTargetRouter, BigInt(amountInWei), BigInt(expirationTimestamp)]
         });
 
-                        // 6. CONSTRUCCIÓN DEL LOTE DE TRANSACCIONES (Multicall ERC-4337 oficial de MiniKit)
+                                // 6. CONSTRUCCIÓN DEL LOTE DE TRANSACCIONES (Multicall ERC-4337 oficial de MiniKit)
         const listaTransacciones = [];
 
-        // [PASO 1] Aprobación ERC20 estándar hacia el allowanceTarget (Permit2)
-        if (tokenInAddress.toLowerCase() !== "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee" && oxContractAddress) {
+        // Extraemos la dirección directamente de los datos devueltos por tu Worker
+        const targetDeAprobacion = swapData.allowanceTarget;
+
+        // [PASO 1] Aprobación ERC20 estándar hacia el contrato objetivo
+        if (tokenInAddress.toLowerCase() !== "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee" && targetDeAprobacion) {
             listaTransacciones.push({
                 to: tokenInAddress,
                 data: approveData,
@@ -1931,6 +1934,7 @@ async function procesarIntercambioReal() {
             chainId: 480, // World Chain Mainnet
             transactions: listaTransacciones
         };
+        
         
         
         // 7. Ejecución nativa mediante el SDK de World App
