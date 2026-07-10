@@ -1845,7 +1845,6 @@ async function procesarIntercambioReal() {
         const swapData = JSON.parse(texto);
 
         // Estructura devuelta por el Worker (0x v2)
-        const permit2Address = "0x000000000022d473030f116ddee9f6b43ac78ba3"; 
         const transactionData = swapData.transaction || {};
         
         const swapTargetRouter = transactionData.to; 
@@ -1857,9 +1856,11 @@ async function procesarIntercambioReal() {
             return;
         }
 
-        // 5. PREPARACIÓN DE LAS ABREVIATURAS Y ABIs PARA EL LOTE MULTICALL
-        
-        // ABI 1: Aprobación Estándar ERC20 (Token -> Permit2)
+        // 5. PREPARACIÓN DE LA APROBACIÓN ERC20
+        // Extraemos la dirección de aprobación directamente de la respuesta del Worker
+        const targetDeAprobacion = swapData.allowanceTarget;
+
+        // ABI Estándar ERC20 (Solo lo que necesitamos para el Approve)
         const erc20ApproveAbi = [
             {
                 "inputs": [
@@ -1873,47 +1874,21 @@ async function procesarIntercambioReal() {
             }
         ];
 
-        // ABI 2: Aprobación Interna de Permit2 (Permit2 -> 0x Router)
-        const permit2ApproveAbi = [
-            {
-                "inputs": [
-                    {"name": "token", "type": "address"},
-                    {"name": "spender", "type": "address"},
-                    {"name": "amount", "type": "uint160"},
-                    {"name": "expiration", "type": "uint48"}
-                ],
-                "name": "approve",
-                "outputs": [],
-                "stateMutability": "nonpayable",
-                "type": "function"
-            }
-        ];
+        // Codificación del Paso 1 usando el target correcto del Worker
+        let approveData = null;
+        if (targetDeAprobacion) {
+            approveData = window.encodeFunctionData({
+                abi: erc20ApproveAbi,
+                functionName: "approve",
+                args: [targetDeAprobacion, BigInt(amountInWei)]
+            });
+        }
 
-        // Codificación del Paso A (ERC20 Approve)
-        const approveData = window.encodeFunctionData({
-            abi: erc20ApproveAbi,
-            functionName: "approve",
-            args: [permit2Address, BigInt(amountInWei)]
-        });
-
-        // Configuración de expiración para Permit2 (2 minutos en el futuro)
-        const expirationTimestamp = Math.floor(Date.now() / 1000) + 30;
-
-        // Codificación del Paso B (Permit2 Approve)
-        const permit2Data = window.encodeFunctionData({
-            abi: permit2ApproveAbi,
-            functionName: "approve",
-            args: [tokenInAddress, swapTargetRouter, BigInt(amountInWei), BigInt(expirationTimestamp)]
-        });
-
-                                // 6. CONSTRUCCIÓN DEL LOTE DE TRANSACCIONES (Multicall ERC-4337 oficial de MiniKit)
+        // 6. CONSTRUCCIÓN DEL LOTE DE TRANSACCIONES (Multicall ERC-4337 oficial de MiniKit)
         const listaTransacciones = [];
 
-        // Extraemos la dirección directamente de los datos devueltos por tu Worker
-        const targetDeAprobacion = swapData.allowanceTarget;
-
-        // [PASO 1] Aprobación ERC20 estándar hacia el contrato objetivo
-        if (tokenInAddress.toLowerCase() !== "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee" && targetDeAprobacion) {
+        // [PASO 1] Aprobación ERC20 estándar hacia el contrato objetivo (Si no es ETH nativo)
+        if (tokenInAddress.toLowerCase() !== "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee" && targetDeAprobacion && approveData) {
             listaTransacciones.push({
                 to: tokenInAddress,
                 data: approveData,
@@ -1934,8 +1909,6 @@ async function procesarIntercambioReal() {
             chainId: 480, // World Chain Mainnet
             transactions: listaTransacciones
         };
-        
-        
         
         // 7. Ejecución nativa mediante el SDK de World App
         const result = await MiniKit.sendTransaction(txPayload);
@@ -1958,9 +1931,8 @@ async function procesarIntercambioReal() {
             String(error)
         );
     }
-    }
-        
-   
+}
+    
 
 function swapTokens(){
 
