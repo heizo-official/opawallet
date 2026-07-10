@@ -1770,9 +1770,9 @@ function toWei(amountStr, decimals) {
 async function procesarIntercambioReal() {
     try {
         // --- NUEVO: Validar que estemos realmente dentro de World App ---
-        if (!window.MiniKit || !window.MiniKit.isInstalled()) {
-            alert("⚠️ MiniKit no está activo. Abre esta app desde dentro de World App.");
-            return;
+        if (!MiniKit.isInstalled()) {
+    alert("⚠️ MiniKit no está activo. Abre esta app desde dentro de World App.");
+    return;
         }
 
         // 1. Lectura dinámica de la interfaz
@@ -1855,6 +1855,7 @@ const swapData = JSON.parse(texto);
 
         // --- CORRECCIÓN CRÍTICA AQUÍ ---
         const txPayload = {
+        chainId: 480,
     transactions: [
         {
             address: tokenInAddress,
