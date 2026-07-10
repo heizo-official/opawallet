@@ -1769,13 +1769,11 @@ function toWei(amountStr, decimals) {
 
 async function procesarIntercambioReal() {
     try {
-        // 1. Validar que estemos realmente dentro de World App
         if (!MiniKit.isInstalled()) {
             alert("⚠️ MiniKit no está activo. Abre esta app desde dentro de World App.");
             return;
         }
 
-        // 2. Lectura dinámica de la interfaz
         const tokenButtons = document.querySelectorAll(".token-select");
         const amounts = document.querySelectorAll(".swap-amount");
 
@@ -1802,7 +1800,7 @@ async function procesarIntercambioReal() {
         const toToken = window.swapTokensList.find(t => t.symbol === toSymbol);
 
         if (!fromToken || !toToken) {
-            alert("⚠️ Por favor selecciona el token a enviar y el token a recibir.");
+            alert("⚠️ Por favor selecciona los tokens correspondientes.");
             return;
         }
 
@@ -1810,7 +1808,6 @@ async function procesarIntercambioReal() {
         const tokenInDecimals = fromToken.decimals || 18; 
         const tokenOutAddress = toToken.address;
 
-        // 3. Conversión de monto a Wei basado en los decimales exactos
         const amountInWei = toWei(amountInput, tokenInDecimals);
         const walletAddress = localStorage.getItem("walletAddress") || MiniKit.walletAddress;
 
@@ -1821,12 +1818,9 @@ async function procesarIntercambioReal() {
 
         const workerUrl = "https://opawallet-swap-v2.heizoai.workers.dev/";
         
-        // 4. Petición POST al Worker de 0x v2
         const response = await fetch(workerUrl, {
             method: "POST",
-            headers: {
-                "Content-Type": "application/json"
-            },
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
                 sellToken: tokenInAddress,
                 buyToken: tokenOutAddress,
@@ -1836,17 +1830,13 @@ async function procesarIntercambioReal() {
         });
 
         const texto = await response.text();
-
         if (!response.ok) {
             alert("❌ Error del Worker:\n" + texto);
             return;
         }
 
         const swapData = JSON.parse(texto);
-
-        // Estructura devuelta por el Worker (0x v2)
         const transactionData = swapData.transaction || {};
-        
         const swapTargetRouter = transactionData.to; 
         const swapCalldata = transactionData.data; 
         const swapValue = transactionData.value || "0";
@@ -1856,11 +1846,10 @@ async function procesarIntercambioReal() {
             return;
         }
 
-        // 5. PREPARACIÓN DE LA APROBACIÓN ERC20
-        // Extraemos la dirección de aprobación directamente de la respuesta del Worker
-        const targetDeAprobacion = swapData.allowanceTarget;
+        // ====== FLUJO OFICIAL DE CONTRATOS PERMIT2 EN WORLD CHAIN ======
+        const permit2Address = "0x000000000022d473030f116ddee9f6b43ac78ba3";
 
-        // ABI Estándar ERC20 (Solo lo que necesitamos para el Approve)
+        // ABI 1: ERC20 Estándar
         const erc20ApproveAbi = [
             {
                 "inputs": [
@@ -1874,31 +1863,58 @@ async function procesarIntercambioReal() {
             }
         ];
 
-        // Codificación del Paso 1 usando el target correcto del Worker
-        let approveData = null;
-        if (targetDeAprobacion) {
-            approveData = window.encodeFunctionData({
-                abi: erc20ApproveAbi,
-                functionName: "approve",
-                args: [targetDeAprobacion, BigInt(amountInWei)]
-            });
-        }
+        // ABI 2: Permit2 Interno
+        const permit2ApproveAbi = [
+            {
+                "inputs": [
+                    {"name": "token", "type": "address"},
+                    {"name": "spender", "type": "address"},
+                    {"name": "amount", "type": "uint160"},
+                    {"name": "expiration", "type": "uint48"}
+                ],
+                "name": "approve",
+                "outputs": [],
+                "stateMutability": "nonpayable",
+                "type": "function"
+            }
+        ];
 
-        // 6. CONSTRUCCIÓN DEL LOTE DE TRANSACCIONES (Multicall ERC-4337 oficial de MiniKit)
+        // Codificación Paso A: Darle los tokens de tu cuenta al contrato maestro de Permit2
+        const approveData = window.encodeFunctionData({
+            abi: erc20ApproveAbi,
+            functionName: "approve",
+            args: [permit2Address, BigInt(amountInWei)]
+        });
+
+        // Codificación Paso B: Autorizar dentro de Permit2 que el Router de 0x retire esos tokens
+        const expirationTimestamp = Math.floor(Date.now() / 1000) + 120; // 2 minutos en el futuro (Timestamp absoluto para el contrato)
+        const permit2Data = window.encodeFunctionData({
+            abi: permit2ApproveAbi,
+            functionName: "approve",
+            args: [tokenInAddress, swapTargetRouter, BigInt(amountInWei), BigInt(expirationTimestamp)]
+        });
+
+        // CONSTRUCCIÓN DEL LOTE MULTICALL (3 PASOS OBLIGATORIOS PARA SMART WALLETS EN 0X V2)
         const listaTransacciones = [];
 
-        // [PASO 1] Aprobación ERC20 estándar hacia el contrato objetivo (Si no es ETH nativo)
-        if (tokenInAddress.toLowerCase() !== "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee" && targetDeAprobacion && approveData) {
+        if (tokenInAddress.toLowerCase() !== "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee") {
+            // [PASO 1] Wallet -> Permit2 Contract
             listaTransacciones.push({
                 to: tokenInAddress,
                 data: approveData,
                 value: "0x0"
             });
+
+            // [PASO 2] Permit2 Contract -> 0x Router Allowance
+            listaTransacciones.push({
+                to: permit2Address,
+                data: permit2Data,
+                value: "0x0"
+            });
         }
 
-        // [PASO 2] Agregar la transacción de ejecución del Swap generada por 0x
+        // [PASO 3] Ejecución del Swap a través del Router de 0x
         const hexValue = "0x" + BigInt(swapValue).toString(16);
-
         listaTransacciones.push({
             to: swapTargetRouter,
             data: swapCalldata,
@@ -1906,30 +1922,24 @@ async function procesarIntercambioReal() {
         });
 
         const txPayload = {
-            chainId: 480, // World Chain Mainnet
+            chainId: 480,
             transactions: listaTransacciones
         };
         
-        // 7. Ejecución nativa mediante el SDK de World App
+        // ENVÍO NATIVO A LA WALLET
         const result = await MiniKit.sendTransaction(txPayload);
-        console.log("Comando de transacción enviado a World App:", result);
-
+        
         if (result.status === "error" || (result.data && result.data.status === "error")) {
             const errorCode = result.data?.error_code || "UNKNOWN_ERROR";
             alert("❌ Transacción rechazada/fallida: " + errorCode);
             return;
         }
 
-        alert("🚀 ¡Transacción enviada! Procesando en World Chain.");
-        console.log(result);
+        alert("🚀 ¡Transacción enviada con éxito a World Chain!");
 
     } catch (error) {
         console.error(error);
-        alert(
-            error?.message ||
-            JSON.stringify(error, null, 2) ||
-            String(error)
-        );
+        alert(error?.message || String(error));
     }
 }
     
