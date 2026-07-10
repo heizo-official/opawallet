@@ -1759,6 +1759,7 @@ swapQuote.amountOut;
 
 }
 
+
 // Conversión matemática a Wei sin depender de librerías externas (Wagmi/Ethers)
 function toWei(amountStr, decimals) {
     let [whole, fraction = ''] = amountStr.toString().split('.');
@@ -1886,8 +1887,10 @@ async function procesarIntercambioReal() {
             args: [permit2Address, BigInt(amountInWei)]
         });
 
+        // 🔥 SINCRONIZADO: Timestamp absoluto de 5 minutos al futuro de forma idéntica al Worker
+        const expirationTimestamp = Math.floor(Date.now() / 1000) + 300; 
+        
         // Codificación Paso B: Autorizar dentro de Permit2 que el Router de 0x retire esos tokens
-        const expirationTimestamp = Math.floor(Date.now() / 1000) + 120; // 2 minutos en el futuro (Timestamp absoluto para el contrato)
         const permit2Data = window.encodeFunctionData({
             abi: permit2ApproveAbi,
             functionName: "approve",
@@ -1942,7 +1945,7 @@ async function procesarIntercambioReal() {
         alert(error?.message || String(error));
     }
 }
-    
+                
 
 function swapTokens(){
 
