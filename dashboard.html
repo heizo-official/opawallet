@@ -1865,12 +1865,12 @@ const swapData = JSON.parse(texto);
         chainId: 480,
     transactions: [
         {
-    address: tokenInAddress,
+    to: tokenInAddress,
     data: approveData,
     value: "0x0"
 },
         {
-            address: swapData.to,
+            to: swapData.to,
 data: swapCalldata,
 value: "0x" + BigInt(swapValue).toString(16)
         }
