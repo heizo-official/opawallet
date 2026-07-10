@@ -1865,8 +1865,8 @@ const swapData = JSON.parse(texto);
         },
         {
             address: swapData.to,
-            data: swapCalldata,
-            value: swapValue.toString()
+data: swapCalldata,
+value: "0x" + BigInt(swapValue).toString(16)
         }
     ]
 };
