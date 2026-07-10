@@ -1770,169 +1770,58 @@ function toWei(amountStr, decimals) {
 async function procesarIntercambioReal() {
     try {
         if (!MiniKit.isInstalled()) {
-            alert("⚠️ MiniKit no está activo. Abre esta app desde dentro de World App.");
+            alert("⚠️ MiniKit no está activo.");
             return;
         }
 
-        const tokenButtons = document.querySelectorAll(".token-select");
-        const amounts = document.querySelectorAll(".swap-amount");
-
-        if (tokenButtons.length < 2 || amounts.length < 1) {
-            alert("⚠️ Error en la interfaz: No se encontraron los campos.");
-            return;
-        }
-
-        const fromSymbol = tokenButtons[0].innerText.replace("▼", "").trim();
-        const toSymbol = tokenButtons[1].innerText.replace("▼", "").trim();
-        const amountInput = amounts[0].value;
-
-        if (!amountInput || Number(amountInput) <= 0) {
-            alert("⚠️ Ingresa una cantidad válida para intercambiar.");
-            return;
-        }
-
-        if (!window.swapTokensList || window.swapTokensList.length === 0) {
-            alert("⚠️ La lista de tokens aún está cargando...");
-            return;
-        }
+        const fromSymbol = document.querySelectorAll(".token-select")[0].innerText.replace("▼", "").trim();
+        const toSymbol = document.querySelectorAll(".token-select")[1].innerText.replace("▼", "").trim();
+        const amountInput = document.querySelectorAll(".swap-amount")[0].value;
 
         const fromToken = window.swapTokensList.find(t => t.symbol === fromSymbol);
         const toToken = window.swapTokensList.find(t => t.symbol === toSymbol);
+        const amountInWei = toWei(amountInput, fromToken.decimals || 18);
 
-        if (!fromToken || !toToken) {
-            alert("⚠️ Por favor selecciona los tokens correspondientes.");
-            return;
-        }
-
-        const tokenInAddress = fromToken.address;
-        const tokenInDecimals = fromToken.decimals || 18; 
-        const tokenOutAddress = toToken.address;
-
-        const amountInWei = toWei(amountInput, tokenInDecimals);
-        const walletAddress = localStorage.getItem("walletAddress") || MiniKit.walletAddress;
-
-        if (!walletAddress) {
-            alert("⚠️ No se detectó la dirección de tu wallet.");
-            return;
-        }
-
-        const workerUrl = "https://opawallet-swap-v2.heizoai.workers.dev/";
-        
-        const response = await fetch(workerUrl, {
+        const response = await fetch("https://opawallet-swap-v2.heizoai.workers.dev/", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-                sellToken: tokenInAddress,
-                buyToken: tokenOutAddress,
+                sellToken: fromToken.address,
+                buyToken: toToken.address,
                 sellAmount: amountInWei,
-                taker: walletAddress
+                taker: MiniKit.walletAddress
             })
         });
 
-        const texto = await response.text();
-        if (!response.ok) {
-            alert("❌ Error del Worker:\n" + texto);
+        const swapData = await response.json();
+        if (!swapData.success) {
+            alert("❌ Error: " + swapData.error);
             return;
         }
 
-        const swapData = JSON.parse(texto);
-        const transactionData = swapData.transaction || {};
-        const swapTargetRouter = transactionData.to; 
-        const swapCalldata = transactionData.data; 
-        const swapValue = transactionData.value || "0";
-
-        if (!swapTargetRouter || !swapCalldata) {
-            alert("⚠️ Error: Los datos de la transacción de 0x vienen incompletos.");
-            return;
-        }
-
-        // ====== FLUJO OFICIAL DE CONTRATOS PERMIT2 EN WORLD CHAIN ======
-        const permit2Address = "0x000000000022d473030f116ddee9f6b43ac78ba3";
-
-        const erc20ApproveAbi = [
-            {
-                "inputs": [
-                    {"name": "spender", "type": "address"},
-                    {"name": "amount", "type": "uint256"}
-                ],
-                "name": "approve",
-                "outputs": [{"name": "", "type": "bool"}],
-                "stateMutability": "nonpayable",
-                "type": "function"
-            }
-        ];
-
-        const permit2ApproveAbi = [
-            {
-                "inputs": [
-                    {"name": "token", "type": "address"},
-                    {"name": "spender", "type": "address"},
-                    {"name": "amount", "type": "uint160"},
-                    {"name": "expiration", "type": "uint48"}
-                ],
-                "name": "approve",
-                "outputs": [],
-                "stateMutability": "nonpayable",
-                "type": "function"
-            }
-        ];
-
-        const approveData = window.encodeFunctionData({
-            abi: erc20ApproveAbi,
-            functionName: "approve",
-            args: [permit2Address, BigInt(amountInWei)]
-        });
-
-        // 🔥 SOLUCIÓN: Usamos exactamente el mismo timestamp seguro provisto por el Worker
-        const expirationTimestamp = swapData.deadline; 
-        
-        const permit2Data = window.encodeFunctionData({
-            abi: permit2ApproveAbi,
-            functionName: "approve",
-            args: [tokenInAddress, swapTargetRouter, BigInt(amountInWei), BigInt(expirationTimestamp)]
-        });
-
-        const listaTransacciones = [];
-
-        if (tokenInAddress.toLowerCase() !== "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee") {
-            listaTransacciones.push({
-                to: tokenInAddress,
-                data: approveData,
-                value: "0x0"
-            });
-
-            listaTransacciones.push({
-                to: permit2Address,
-                data: permit2Data,
-                value: "0x0"
-            });
-        }
-
-        const hexValue = "0x" + BigInt(swapValue).toString(16);
-        listaTransacciones.push({
-            to: swapTargetRouter,
-            data: swapCalldata,
-            value: hexValue
-        });
-
+        // ====== FLUJO SIMPLIFICADO ======
+        // World Chain maneja el Permit2 automáticamente. 
+        // Enviamos SOLO la transacción del swap.
         const txPayload = {
             chainId: 480,
-            transactions: listaTransacciones
+            transactions: [{
+                to: swapData.transaction.to,
+                data: swapData.transaction.data,
+                value: "0x" + BigInt(swapData.transaction.value || 0).toString(16)
+            }]
         };
         
         const result = await MiniKit.sendTransaction(txPayload);
         
-        if (result.status === "error" || (result.data && result.data.status === "error")) {
-            const errorCode = result.data?.error_code || "UNKNOWN_ERROR";
-            alert("❌ Transacción rechazada/fallida: " + errorCode);
-            return;
+        if (result.status === "success") {
+            alert("🚀 ¡Transacción enviada con éxito!");
+        } else {
+            alert("❌ Transacción fallida o rechazada.");
         }
-
-        alert("🚀 ¡Transacción enviada con éxito a World Chain!");
 
     } catch (error) {
         console.error(error);
-        alert(error?.message || String(error));
+        alert("Error crítico: " + error.message);
     }
 }
     
