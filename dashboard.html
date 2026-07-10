@@ -1810,7 +1810,7 @@ async function procesarIntercambioReal() {
 
         // 4. Petición al Cloudflare Worker (Agregador 0x)
         // Nota: Tu worker configurará el affiliateFee y feeRecipient en la URL final de 0x
-        const workerUrl = `https://TU_WORKER.workers.dev/swap?sellToken=${tokenInAddress}&buyToken=${tokenOutAddress}&sellAmount=${amountInWei}`;
+        const workerUrl = `https://opawallet-swap-v2.heizoai.workers.dev/swap?sellToken=${tokenInAddress}&buyToken=${tokenOutAddress}&sellAmount=${amountInWei}`;
         
         const response = await fetch(workerUrl);
         if (!response.ok) throw new Error("Fallo en la comunicación con el Worker de 0x");
