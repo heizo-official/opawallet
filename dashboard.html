@@ -1759,7 +1759,6 @@ swapQuote.amountOut;
 
 }
 
-
 // Conversión matemática a Wei sin depender de librerías externas (Wagmi/Ethers)
 function toWei(amountStr, decimals) {
     let [whole, fraction = ''] = amountStr.toString().split('.');
@@ -1850,7 +1849,6 @@ async function procesarIntercambioReal() {
         // ====== FLUJO OFICIAL DE CONTRATOS PERMIT2 EN WORLD CHAIN ======
         const permit2Address = "0x000000000022d473030f116ddee9f6b43ac78ba3";
 
-        // ABI 1: ERC20 Estándar
         const erc20ApproveAbi = [
             {
                 "inputs": [
@@ -1864,7 +1862,6 @@ async function procesarIntercambioReal() {
             }
         ];
 
-        // ABI 2: Permit2 Interno
         const permit2ApproveAbi = [
             {
                 "inputs": [
@@ -1880,35 +1877,30 @@ async function procesarIntercambioReal() {
             }
         ];
 
-        // Codificación Paso A: Darle los tokens de tu cuenta al contrato maestro de Permit2
         const approveData = window.encodeFunctionData({
             abi: erc20ApproveAbi,
             functionName: "approve",
             args: [permit2Address, BigInt(amountInWei)]
         });
 
-        // 🔥 SINCRONIZADO: Timestamp absoluto de 2 minutos al futuro de forma idéntica al Worker
-        const expirationTimestamp = Math.floor(Date.now() / 1000) + 120; 
+        // 🔥 SOLUCIÓN: Usamos exactamente el mismo timestamp seguro provisto por el Worker
+        const expirationTimestamp = swapData.deadline; 
         
-        // Codificación Paso B: Autorizar dentro de Permit2 que el Router de 0x retire esos tokens
         const permit2Data = window.encodeFunctionData({
             abi: permit2ApproveAbi,
             functionName: "approve",
             args: [tokenInAddress, swapTargetRouter, BigInt(amountInWei), BigInt(expirationTimestamp)]
         });
 
-        // CONSTRUCCIÓN DEL LOTE MULTICALL (3 PASOS OBLIGATORIOS PARA SMART WALLETS EN 0X V2)
         const listaTransacciones = [];
 
         if (tokenInAddress.toLowerCase() !== "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee") {
-            // [PASO 1] Wallet -> Permit2 Contract
             listaTransacciones.push({
                 to: tokenInAddress,
                 data: approveData,
                 value: "0x0"
             });
 
-            // [PASO 2] Permit2 Contract -> 0x Router Allowance
             listaTransacciones.push({
                 to: permit2Address,
                 data: permit2Data,
@@ -1916,7 +1908,6 @@ async function procesarIntercambioReal() {
             });
         }
 
-        // [PASO 3] Ejecución del Swap a través del Router de 0x
         const hexValue = "0x" + BigInt(swapValue).toString(16);
         listaTransacciones.push({
             to: swapTargetRouter,
@@ -1929,7 +1920,6 @@ async function procesarIntercambioReal() {
             transactions: listaTransacciones
         };
         
-        // ENVÍO NATIVO A LA WALLET
         const result = await MiniKit.sendTransaction(txPayload);
         
         if (result.status === "error" || (result.data && result.data.status === "error")) {
@@ -1945,6 +1935,8 @@ async function procesarIntercambioReal() {
         alert(error?.message || String(error));
     }
 }
+    
+
                 
 
 function swapTokens(){
