@@ -1880,12 +1880,13 @@ value: "0x" + BigInt(swapValue).toString(16)
 };
 
         // 6. Ejecución nativa a través del Smart Contract Wallet
-        alert(JSON.stringify(txPayload, null, 2));
-
-alert(
-`Approve -> ${tokenInAddress}
-
-Swap -> ${swapData.to}`
+        alert(
+JSON.stringify({
+    token: tokenInAddress,
+    approveTo: oxContractAddress,
+    swapTo: swapData.to,
+    chainId: 480
+}, null, 2)
 );
         
 const result = await MiniKit.sendTransaction(txPayload);
