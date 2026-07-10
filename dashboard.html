@@ -1884,13 +1884,16 @@ async function procesarIntercambioReal() {
         });
 
         // 🔥 SOLUCIÓN: Usamos exactamente el mismo timestamp seguro provisto por el Worker
-        const expirationTimestamp = swapData.deadline; 
-        
         const permit2Data = window.encodeFunctionData({
-            abi: permit2ApproveAbi,
-            functionName: "approve",
-            args: [tokenInAddress, swapTargetRouter, BigInt(amountInWei), BigInt(expirationTimestamp)]
-        });
+    abi: permit2ApproveAbi,
+    functionName: "approve",
+    args: [
+        tokenInAddress,
+        swapData.allowanceTarget,
+        BigInt(amountInWei),
+        0n
+    ]
+});
 
         const listaTransacciones = [];
 
