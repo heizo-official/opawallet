@@ -1888,7 +1888,7 @@ async function procesarIntercambioReal() {
         });
 
         // 🔥 SINCRONIZADO: Timestamp absoluto de 5 minutos al futuro de forma idéntica al Worker
-        const expirationTimestamp = Math.floor(Date.now() / 1000) + 300; 
+        const expirationTimestamp = Math.floor(Date.now() / 1000) + 120; 
         
         // Codificación Paso B: Autorizar dentro de Permit2 que el Router de 0x retire esos tokens
         const permit2Data = window.encodeFunctionData({
