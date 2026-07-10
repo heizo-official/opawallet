@@ -1784,7 +1784,6 @@ async function procesarIntercambioReal() {
             return;
         }
 
-        // Limpieza del texto (quitando la flecha ▼ y espacios)
         const fromSymbol = tokenButtons[0].innerText.replace("▼", "").trim();
         const toSymbol = tokenButtons[1].innerText.replace("▼", "").trim();
         const amountInput = amounts[0].value;
@@ -1820,10 +1819,9 @@ async function procesarIntercambioReal() {
             return;
         }
 
-        // Cambiamos la URL a la raíz de tu worker (sin query params en la URL)
         const workerUrl = "https://opawallet-swap-v2.heizoai.workers.dev/";
         
-        // 4. CORRECCIÓN: Petición POST con el BODY que espera tu nuevo Worker
+        // 4. Petición POST al Worker de 0x v2
         const response = await fetch(workerUrl, {
             method: "POST",
             headers: {
@@ -1845,10 +1843,9 @@ async function procesarIntercambioReal() {
         }
 
         const swapData = JSON.parse(texto);
-        alert("Cotización recibida con éxito de 0x!");
 
-        // CORRECCIÓN: Estructura real devuelta por nuestro Worker (basada en 0x v2)
-        const oxContractAddress = swapData.allowanceTarget; 
+        // Estructura devuelta por el Worker (0x v2)
+        const permit2Address = "0x000000000022d473030f116ddee9f6b43ac78ba3"; 
         const transactionData = swapData.transaction || {};
         
         const swapTargetRouter = transactionData.to; 
@@ -1860,7 +1857,9 @@ async function procesarIntercambioReal() {
             return;
         }
 
-        // 5. Estructuración del lote ERC-4337 (Approve + Swap)
+        // 5. PREPARACIÓN DE LAS ABREVIATURAS Y ABIs PARA EL LOTE MULTICALL
+        
+        // ABI 1: Aprobación Estándar ERC20 (Token -> Permit2)
         const erc20ApproveAbi = [
             {
                 "inputs": [
@@ -1874,51 +1873,75 @@ async function procesarIntercambioReal() {
             }
         ];
 
-        // Codificación de la aprobación usando la función global que tiene tu app
+        // ABI 2: Aprobación Interna de Permit2 (Permit2 -> 0x Router)
+        const permit2ApproveAbi = [
+            {
+                "inputs": [
+                    {"name": "token", "type": "address"},
+                    {"name": "spender", "type": "address"},
+                    {"name": "amount", "type": "uint160"},
+                    {"name": "expiration", "type": "uint48"}
+                ],
+                "name": "approve",
+                "outputs": [],
+                "stateMutability": "nonpayable",
+                "type": "function"
+            }
+        ];
+
+        // Codificación del Paso A (ERC20 Approve)
         const approveData = window.encodeFunctionData({
             abi: erc20ApproveAbi,
             functionName: "approve",
-            args: [oxContractAddress, BigInt(amountInWei)]
+            args: [permit2Address, BigInt(amountInWei)]
         });
 
+        // Configuración de expiración para Permit2 (30 minutos en el futuro)
+        const expirationTimestamp = Math.floor(Date.now() / 1000) + 1800;
+
+        // Codificación del Paso B (Permit2 Approve)
+        const permit2Data = window.encodeFunctionData({
+            abi: permit2ApproveAbi,
+            functionName: "approve",
+            args: [tokenInAddress, swapTargetRouter, BigInt(amountInWei), BigInt(expirationTimestamp)]
+        });
+
+        // 6. CONSTRUCCIÓN DEL LOTE DE TRANSACCIONES (Multicall ERC-4337)
         const listaTransacciones = [];
 
-        // Si no es el token nativo (ETH), metemos la aprobación en el lote multicall de World Chain
-        if (tokenInAddress.toLowerCase() !== "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee" && oxContractAddress) {
+        // Si no es el token nativo (ETH), inyectamos de forma obligatoria ambas aprobaciones en el lote
+        if (tokenInAddress.toLowerCase() !== "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee") {
+            
+            // [PASO A] Darle custodia de los tokens a Permit2
             listaTransacciones.push({
                 to: tokenInAddress,
                 data: approveData,
-                value: "0x0"
+                value: "0" // Formato cadena base-10 exigido por MiniKit
+            });
+
+            // [PASO B] Autorizar internamente dentro de Permit2 que 0x retire esos tokens
+            listaTransacciones.push({
+                to: permit2Address,
+                data: permit2Data,
+                value: "0" // Formato cadena base-10 exigido por MiniKit
             });
         }
 
-        // Agregamos la transacción del swap generada por 0x
-        // Convertimos el value a Hexadecimal de forma limpia (ej: "0x0" o "0xabc")
-        const hexValue = "0x" + BigInt(swapValue).toString(16);
+        // [PASO C] Agregar la transacción final del swap generada por 0x
+        const base10Value = BigInt(swapValue).toString(); // Limpieza absoluta a Base-10 string sin "0x"
 
         listaTransacciones.push({
             to: swapTargetRouter,
             data: swapCalldata,
-            value: hexValue
+            value: base10Value
         });
 
         const txPayload = {
             chainId: 480, // World Chain Mainnet
             transactions: listaTransacciones
         };
-
-        // Alerta de confirmación visual antes de disparar el SDK
-        alert(
-            JSON.stringify({
-                info: "Enviando lote a World App",
-                operaciones: listaTransacciones.length,
-                approveTo: oxContractAddress,
-                swapTo: swapTargetRouter,
-                valueHex: hexValue
-            }, null, 2)
-        );
         
-        // 6. Ejecución nativa a través del Smart Contract Wallet de World App
+        // 7. Ejecución nativa mediante el SDK de World App
         const result = await MiniKit.sendTransaction(txPayload);
         console.log("Comando de transacción enviado a World App:", result);
 
@@ -1939,9 +1962,8 @@ async function procesarIntercambioReal() {
             String(error)
         );
     }
-}
-    
-   
+    }
+        
    
 
 function swapTokens(){
