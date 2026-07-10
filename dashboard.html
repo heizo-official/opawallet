@@ -1924,7 +1924,7 @@ async function procesarIntercambioReal() {
         
         if (result.status === "error" || (result.data && result.data.status === "error")) {
             const errorCode = result.data?.error_code || "UNKNOWN_ERROR";
-            alert("❌ Transacción rechazada/fallida: " + errorCode);
+            alert("🚫 Transacción rechazada/fallida: " + errorCode);
             return;
         }
 
