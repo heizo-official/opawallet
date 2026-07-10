@@ -1880,6 +1880,12 @@ value: "0x" + BigInt(swapValue).toString(16)
         // 6. Ejecución nativa a través del Smart Contract Wallet
         alert(JSON.stringify(txPayload, null, 2));
 
+alert(
+`Approve -> ${tokenInAddress}
+
+Swap -> ${swapData.to}`
+);
+        
 const result = await MiniKit.sendTransaction(txPayload);
         console.log("Comando de transacción enviado a World App:", result);
 
