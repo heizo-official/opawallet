@@ -1855,20 +1855,20 @@ const swapData = JSON.parse(texto);
 
         // --- CORRECCIÓN CRÍTICA AQUÍ ---
         const txPayload = {
-            transaction: [ // <- En singular, obligado por MiniKit
-                {
-                    address: tokenInAddress,
-                    abi: erc20ApproveAbi,
-                    functionName: "approve",
-                    args: [oxContractAddress, amountInWei]
-                },
-                {
-                    address: swapData.to,
-                    data: swapCalldata, // <- "data", no "calldata". Se quita operation:"call"
-                    value: swapValue.toString() // <- Seguro como String
-                }
-            ]
-        };
+    transactions: [
+        {
+            address: tokenInAddress,
+            abi: erc20ApproveAbi,
+            functionName: "approve",
+            args: [oxContractAddress, amountInWei]
+        },
+        {
+            address: swapData.to,
+            data: swapCalldata,
+            value: swapValue.toString()
+        }
+    ]
+};
 
         // 6. Ejecución nativa a través del Smart Contract Wallet
         const result = await MiniKit.commands.sendTransaction(txPayload);
