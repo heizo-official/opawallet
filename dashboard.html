@@ -1906,40 +1906,42 @@ async function procesarIntercambioReal() {
             args: [tokenInAddress, swapTargetRouter, BigInt(amountInWei), BigInt(expirationTimestamp)]
         });
 
-        // 6. CONSTRUCCIÓN DEL LOTE DE TRANSACCIONES (Multicall ERC-4337)
+                // 6. CONSTRUCCIÓN DEL LOTE DE TRANSACCIONES (Multicall ERC-4337)
         const listaTransacciones = [];
 
-        // Si no es el token nativo (ETH), inyectamos de forma obligatoria ambas aprobaciones en el lote
+        // Si no es el token nativo (ETH), inyectamos ambas aprobaciones en el lote
         if (tokenInAddress.toLowerCase() !== "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee") {
             
             // [PASO A] Darle custodia de los tokens a Permit2
             listaTransacciones.push({
                 to: tokenInAddress,
                 data: approveData,
-                value: "0" // Formato cadena base-10 exigido por MiniKit
+                value: "0x0" // <- CORREGIDO: Formato Hexadecimal exigido por MiniKit
             });
 
             // [PASO B] Autorizar internamente dentro de Permit2 que 0x retire esos tokens
             listaTransacciones.push({
                 to: permit2Address,
                 data: permit2Data,
-                value: "0" // Formato cadena base-10 exigido por MiniKit
+                value: "0x0" // <- CORREGIDO: Formato Hexadecimal exigido por MiniKit
             });
         }
 
         // [PASO C] Agregar la transacción final del swap generada por 0x
-        const base10Value = BigInt(swapValue).toString(); // Limpieza absoluta a Base-10 string sin "0x"
+        // Convertimos de forma segura el value de la cotización a un string hexadecimal válido
+        const hexValue = "0x" + BigInt(swapValue).toString(16);
 
         listaTransacciones.push({
             to: swapTargetRouter,
             data: swapCalldata,
-            value: base10Value
+            value: hexValue // <- CORREGIDO: Ahora va como un string hexadecimal limpio (ej: "0x0" o "0x1a")
         });
 
         const txPayload = {
             chainId: 480, // World Chain Mainnet
             transactions: listaTransacciones
         };
+        
         
         // 7. Ejecución nativa mediante el SDK de World App
         const result = await MiniKit.sendTransaction(txPayload);
