@@ -1769,13 +1769,13 @@ function toWei(amountStr, decimals) {
 
 async function procesarIntercambioReal() {
     try {
-        // --- NUEVO: Validar que estemos realmente dentro de World App ---
+        // 1. Validar que estemos realmente dentro de World App
         if (!MiniKit.isInstalled()) {
-    alert("⚠️ MiniKit no está activo. Abre esta app desde dentro de World App.");
-    return;
+            alert("⚠️ MiniKit no está activo. Abre esta app desde dentro de World App.");
+            return;
         }
 
-        // 1. Lectura dinámica de la interfaz
+        // 2. Lectura dinámica de la interfaz
         const tokenButtons = document.querySelectorAll(".token-select");
         const amounts = document.querySelectorAll(".swap-amount");
 
@@ -1789,7 +1789,6 @@ async function procesarIntercambioReal() {
         const toSymbol = tokenButtons[1].innerText.replace("▼", "").trim();
         const amountInput = amounts[0].value;
 
-        // --- NUEVO: Alertas visibles si falta información ---
         if (!amountInput || Number(amountInput) <= 0) {
             alert("⚠️ Ingresa una cantidad válida para intercambiar.");
             return;
@@ -1814,36 +1813,55 @@ async function procesarIntercambioReal() {
 
         // 3. Conversión de monto a Wei basado en los decimales exactos
         const amountInWei = toWei(amountInput, tokenInDecimals);
+        const walletAddress = localStorage.getItem("walletAddress") || MiniKit.walletAddress;
 
-        // 4. Petición al Cloudflare Worker (Agregador 0x)
-        const walletAddress = localStorage.getItem("walletAddress");
+        if (!walletAddress) {
+            alert("⚠️ No se detectó la dirección de tu wallet.");
+            return;
+        }
 
-const workerUrl =
-`https://opawallet-swap-v2.heizoai.workers.dev/swap?sellToken=${tokenInAddress}&buyToken=${tokenOutAddress}&sellAmount=${amountInWei}&taker=${walletAddress}`;
-
-       alert(workerUrl);
+        // Cambiamos la URL a la raíz de tu worker (sin query params en la URL)
+        const workerUrl = "https://opawallet-swap-v2.heizoai.workers.dev/";
         
-        const response = await fetch(workerUrl);
+        // 4. CORRECCIÓN: Petición POST con el BODY que espera tu nuevo Worker
+        const response = await fetch(workerUrl, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                sellToken: tokenInAddress,
+                buyToken: tokenOutAddress,
+                sellAmount: amountInWei,
+                taker: walletAddress
+            })
+        });
 
-const texto = await response.text();
+        const texto = await response.text();
 
-alert(texto);
+        if (!response.ok) {
+            alert("❌ Error del Worker:\n" + texto);
+            return;
+        }
 
-if (!response.ok) {
-    return;
-}
+        const swapData = JSON.parse(texto);
+        alert("Cotización recibida con éxito de 0x!");
 
-const swapData = JSON.parse(texto);
+        // CORRECCIÓN: Estructura real devuelta por nuestro Worker (basada en 0x v2)
+        const oxContractAddress = swapData.allowanceTarget; 
+        const transactionData = swapData.transaction || {};
+        
+        const swapTargetRouter = transactionData.to; 
+        const swapCalldata = transactionData.data; 
+        const swapValue = transactionData.value || "0";
 
-        const oxContractAddress = swapData.allowanceTarget || swapData.to; 
-        const swapCalldata = swapData.data; 
-        const swapValue = swapData.value || "0";
-
-        alert(JSON.stringify(swapData, null, 2));
+        if (!swapTargetRouter || !swapCalldata) {
+            alert("⚠️ Error: Los datos de la transacción de 0x vienen incompletos.");
+            return;
+        }
 
         // 5. Estructuración del lote ERC-4337 (Approve + Swap)
         const erc20ApproveAbi = [
-            
             {
                 "inputs": [
                     {"name": "spender", "type": "address"},
@@ -1856,60 +1874,74 @@ const swapData = JSON.parse(texto);
             }
         ];
 
+        // Codificación de la aprobación usando la función global que tiene tu app
         const approveData = window.encodeFunctionData({
-    abi: erc20ApproveAbi,
-    functionName: "approve",
-    args: [oxContractAddress, BigInt(amountInWei)]
-});
+            abi: erc20ApproveAbi,
+            functionName: "approve",
+            args: [oxContractAddress, BigInt(amountInWei)]
+        });
 
-        // --- CORRECCIÓN CRÍTICA AQUÍ ---
-        const txPayload = {
-        chainId: 480,
-    transactions: [
-        {
-    to: tokenInAddress,
-    data: approveData,
-    value: "0x0"
-},
-        {
-            to: swapData.to,
-data: swapCalldata,
-value: "0x" + BigInt(swapValue).toString(16)
+        const listaTransacciones = [];
+
+        // Si no es el token nativo (ETH), metemos la aprobación en el lote multicall de World Chain
+        if (tokenInAddress.toLowerCase() !== "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee" && oxContractAddress) {
+            listaTransacciones.push({
+                to: tokenInAddress,
+                data: approveData,
+                value: "0x0"
+            });
         }
-    ]
-};
 
-        // 6. Ejecución nativa a través del Smart Contract Wallet
+        // Agregamos la transacción del swap generada por 0x
+        // Convertimos el value a Hexadecimal de forma limpia (ej: "0x0" o "0xabc")
+        const hexValue = "0x" + BigInt(swapValue).toString(16);
+
+        listaTransacciones.push({
+            to: swapTargetRouter,
+            data: swapCalldata,
+            value: hexValue
+        });
+
+        const txPayload = {
+            chainId: 480, // World Chain Mainnet
+            transactions: listaTransacciones
+        };
+
+        // Alerta de confirmación visual antes de disparar el SDK
         alert(
-JSON.stringify({
-    token: tokenInAddress,
-    approveTo: oxContractAddress,
-    swapTo: swapData.to,
-    chainId: 480
-}, null, 2)
-);
+            JSON.stringify({
+                info: "Enviando lote a World App",
+                operaciones: listaTransacciones.length,
+                approveTo: oxContractAddress,
+                swapTo: swapTargetRouter,
+                valueHex: hexValue
+            }, null, 2)
+        );
         
-const result = await MiniKit.sendTransaction(txPayload);
+        // 6. Ejecución nativa a través del Smart Contract Wallet de World App
+        const result = await MiniKit.sendTransaction(txPayload);
         console.log("Comando de transacción enviado a World App:", result);
 
-        if (result.data.status === "error") {
-    alert(result.data.error_code);
-    return;
-}
+        if (result.status === "error" || (result.data && result.data.status === "error")) {
+            const errorCode = result.data?.error_code || "UNKNOWN_ERROR";
+            alert("❌ Transacción rechazada/fallida: " + errorCode);
+            return;
+        }
 
-console.log(result);
+        alert("🚀 ¡Transacción enviada! Procesando en World Chain.");
+        console.log(result);
 
     } catch (error) {
-    console.error(error);
-
-    alert(
-        error?.message ||
-        JSON.stringify(error, null, 2) ||
-        String(error)
-    );
+        console.error(error);
+        alert(
+            error?.message ||
+            JSON.stringify(error, null, 2) ||
+            String(error)
+        );
     }
 }
     
+   
    
 
 function swapTokens(){
