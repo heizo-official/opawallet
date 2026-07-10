@@ -1821,12 +1821,16 @@ async function procesarIntercambioReal() {
        alert(workerUrl);
         
         const response = await fetch(workerUrl);
-        if (!response.ok) {
-            alert("⚠️ Fallo al obtener la ruta de intercambio desde 0x.");
-            throw new Error("Fallo en la comunicación con el Worker de 0x");
-        }
-        
-        const swapData = await response.json();
+
+const texto = await response.text();
+
+alert(texto);
+
+if (!response.ok) {
+    return;
+}
+
+const swapData = JSON.parse(texto);
 
         const oxContractAddress = swapData.allowanceTarget || swapData.to; 
         const swapCalldata = swapData.data; 
