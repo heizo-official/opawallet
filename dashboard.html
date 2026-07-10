@@ -1816,7 +1816,10 @@ async function procesarIntercambioReal() {
         const amountInWei = toWei(amountInput, tokenInDecimals);
 
         // 4. Petición al Cloudflare Worker (Agregador 0x)
-        const workerUrl = `https://opawallet-swap-v2.heizoai.workers.dev/swap?sellToken=${tokenInAddress}&buyToken=${tokenOutAddress}&sellAmount=${amountInWei}`;
+        const walletAddress = localStorage.getItem("walletAddress");
+
+const workerUrl =
+`https://opawallet-swap-v2.heizoai.workers.dev/swap?sellToken=${tokenInAddress}&buyToken=${tokenOutAddress}&sellAmount=${amountInWei}&taker=${walletAddress}`;
 
        alert(workerUrl);
         
