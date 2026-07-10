@@ -1871,7 +1871,9 @@ const swapData = JSON.parse(texto);
 };
 
         // 6. Ejecución nativa a través del Smart Contract Wallet
-        const result = await MiniKit.commands.sendTransaction(txPayload);
+        alert(JSON.stringify(txPayload, null, 2));
+
+const result = await MiniKit.commands.sendTransaction(txPayload);
         console.log("Comando de transacción enviado a World App:", result);
 
         if (result && result.finalPayload && result.finalPayload.status === "error") {
@@ -1879,8 +1881,13 @@ const swapData = JSON.parse(texto);
         }
 
     } catch (error) {
-        console.error("Error al ejecutar el swap:", error);
-        alert("⚠️ Ocurrió un error interno al preparar el Swap.");
+    console.error(error);
+
+    alert(
+        error?.message ||
+        JSON.stringify(error, null, 2) ||
+        String(error)
+    );
     }
 }
     
