@@ -1897,7 +1897,7 @@ async function procesarIntercambioReal() {
         });
 
         // Configuración de expiración para Permit2 (2 minutos en el futuro)
-        const expirationTimestamp = Math.floor(Date.now() / 1000) + 40;
+        const expirationTimestamp = Math.floor(Date.now() / 1000) + 30;
 
         // Codificación del Paso B (Permit2 Approve)
         const permit2Data = window.encodeFunctionData({
