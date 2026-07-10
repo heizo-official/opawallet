@@ -1865,11 +1865,10 @@ const swapData = JSON.parse(texto);
         chainId: 480,
     transactions: [
         {
-            address: tokenInAddress,
-            abi: erc20ApproveAbi,
-            functionName: "approve",
-            args: [oxContractAddress, amountInWei]
-        },
+    address: tokenInAddress,
+    data: approveData,
+    value: "0x0"
+},
         {
             address: swapData.to,
 data: swapCalldata,
