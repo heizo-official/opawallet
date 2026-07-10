@@ -1817,6 +1817,8 @@ async function procesarIntercambioReal() {
 
         // 4. Petición al Cloudflare Worker (Agregador 0x)
         const workerUrl = `https://opawallet-swap-v2.heizoai.workers.dev/swap?sellToken=${tokenInAddress}&buyToken=${tokenOutAddress}&sellAmount=${amountInWei}`;
+
+       alert(workerUrl);
         
         const response = await fetch(workerUrl);
         if (!response.ok) {
