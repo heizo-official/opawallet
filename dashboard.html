@@ -1776,7 +1776,6 @@ function toWei(amountStr, decimals) {
     return BigInt(whole + fraction).toString();
 }
 
-
 async function procesarIntercambioReal() {
     try {
         const walletAddress = localStorage.getItem("walletAddress");
@@ -1793,7 +1792,6 @@ async function procesarIntercambioReal() {
 
         const amountInWei = BigInt(toWei(amountInput || "0", fromToken.decimals || 18));
 
-        // 1. LLAMADA AL WORKER DE 0X (ZERO)
         const response = await fetch("https://opawallet-swap-v2.heizoai.workers.dev/", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -1811,42 +1809,46 @@ async function procesarIntercambioReal() {
             return;
         }
 
-        // --- EL BYPASS DE SEGURIDAD PARA EL ROUTER ---
-        // Forzamos el uso del Router oficial registrado en tu Portal (0x1072...)
         const FORCED_ROUTER = "0x1072a0a713a23a2da9bab99e9cd68187970e89a4";
         swapData.transaction.to = FORCED_ROUTER; 
 
-        // 2. APROBACIÓN ESTRICTA
-        const spenderAddress = swapData.allowanceTarget || swapData.transaction.to;
-        const approveData = window.encodeFunctionData({
-            abi: [{
-                "inputs": [ { "name": "spender", "type": "address" }, { "name": "amount", "type": "uint256" } ],
-                "name": "approve",
-                "outputs": [{ "name": "", "type": "bool" }],
-                "stateMutability": "nonpayable",
-                "type": "function"
-            }],
-            functionName: "approve",
-            args: [spenderAddress, amountInWei] 
+        // --- LÓGICA HÍBRIDA: SI HAY PERMIT2, LO USAMOS; SI NO, APPROVE ---
+        let txTransactions = [];
+
+        if (swapData.permit2 && swapData.permit2.data) {
+            // Caso A: Usamos Permit2 (Preferido por World Chain)
+            txTransactions.push({
+                to: "0x000000000022D473030F116dDEE9F6B43aC78BA3",
+                data: swapData.permit2.data,
+                value: "0x0"
+            });
+        } else {
+            // Caso B: Usamos el Approve estándar (El que ya probaste)
+            const spenderAddress = swapData.allowanceTarget || swapData.transaction.to;
+            const approveData = window.encodeFunctionData({
+                abi: [{ "inputs": [ { "name": "spender", "type": "address" }, { "name": "amount", "type": "uint256" } ], "name": "approve", "outputs": [{ "name": "", "type": "bool" }], "stateMutability": "nonpayable", "type": "function" }],
+                functionName: "approve",
+                args: [spenderAddress, amountInWei] 
+            });
+            txTransactions.push({
+                to: fromToken.address, 
+                data: approveData,
+                value: "0x0"
+            });
+        }
+
+        // Agregar la transacción del Swap al final
+        txTransactions.push({
+            to: swapData.transaction.to,
+            data: swapData.transaction.data,
+            value: (swapData.transaction.value && swapData.transaction.value !== "0") 
+                   ? "0x" + BigInt(swapData.transaction.value).toString(16) 
+                   : "0x0"
         });
-        
-        // 3. EL BATCH OFICIAL (Con el Router forzado arriba)
+
         const txPayload = {
             chainId: 480, 
-            transactions: [
-                {
-                    to: fromToken.address, 
-                    data: approveData,
-                    value: "0x0"
-                },
-                {
-                    to: swapData.transaction.to, // Ya está forzado a 0x1072...
-                    data: swapData.transaction.data,
-                    value: (swapData.transaction.value && swapData.transaction.value !== "0") 
-                           ? "0x" + BigInt(swapData.transaction.value).toString(16) 
-                           : "0x0"
-                }
-            ]
+            transactions: txTransactions
         };
         
         const result = await window.MiniKit.sendTransaction(txPayload);
@@ -1861,7 +1863,7 @@ async function procesarIntercambioReal() {
         console.error("Error crítico:", error);
         alert("Error: " + error.message);
     }
-}
+ }
     
     
 
