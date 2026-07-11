@@ -1824,21 +1824,23 @@ async function procesarIntercambioReal() {
             maxUint160.replace("0x", "").padStart(64, "0") + 
             pad32(expiration);
 
-        const txPayload = {
+                const txPayload = {
             chainId: 480,
             transactions: [
                 {
                     to: PERMIT2_ADDRESS,
                     data: permit2Data,
-                    value: "0"
+                    value: "0x0" // Obligatorio: debe ser "0x0" y no "0"
                 },
                 {
                     to: swapData.transaction.to,
                     data: swapData.transaction.data,
-                    value: swapData.transaction.value ? swapData.transaction.value.toString() : "0"
+                    // Si el swap tiene un valor nativo, lo convertimos a HEX. Si no, forzamos "0x0"
+                    value: swapData.transaction.value ? ("0x" + BigInt(swapData.transaction.value).toString(16)) : "0x0"
                 }
             ]
         };
+        
 
         const result = await window.MiniKit.sendTransaction(txPayload);
 
