@@ -1774,34 +1774,52 @@ async function procesarIntercambioReal() {
             return;
         }
 
+        // 1. Obtener datos de la interfaz
         const fromSymbol = document.querySelectorAll(".token-select")[0].innerText.replace("▼", "").trim();
         const toSymbol = document.querySelectorAll(".token-select")[1].innerText.replace("▼", "").trim();
         const amountInput = document.querySelectorAll(".swap-amount")[0].value;
 
+        // 2. Validación de búsqueda de tokens (evita que el código explote)
         const fromToken = window.swapTokensList.find(t => t.symbol === fromSymbol);
         const toToken = window.swapTokensList.find(t => t.symbol === toSymbol);
-        const amountInWei = toWei(amountInput, fromToken.decimals || 18);
 
+        if (!fromToken || !toToken) {
+            alert("❌ Error: No se encontraron los tokens seleccionados.");
+            return;
+        }
+
+        // 3. Validación de Wallet
+        const walletAddress = MiniKit.walletAddress;
+        if (!walletAddress) {
+            alert("❌ Error: No se detectó la dirección de la wallet.");
+            return;
+        }
+
+        // 4. Conversión a Wei (asegurando que amountInput sea un número)
+        const amountInWei = toWei(amountInput || "0", fromToken.decimals || 18);
+
+        // 5. Llamada al Worker
         const response = await fetch("https://opawallet-swap-v2.heizoai.workers.dev/", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
                 sellToken: fromToken.address,
                 buyToken: toToken.address,
-                sellAmount: amountInWei,
-                taker: MiniKit.walletAddress
+                sellAmount: amountInWei.toString(), // Aseguramos que sea string
+                taker: walletAddress
             })
         });
 
         const swapData = await response.json();
+        
+        // Si el worker falla, mostramos el error específico que viene del servidor
         if (!swapData.success) {
-            alert("❌ Error: " + swapData.error);
+            alert("❌ Error del servidor: " + (swapData.error || "Desconocido"));
             return;
         }
 
-        // ====== FLUJO SIMPLIFICADO ======
-        // World Chain maneja el Permit2 automáticamente. 
-        // Enviamos SOLO la transacción del swap.
+        // 6. Preparar transacción para MiniKit
+        // World Chain maneja Permit2 automáticamente, enviamos solo el swap del router
         const txPayload = {
             chainId: 480,
             transactions: [{
@@ -1811,19 +1829,21 @@ async function procesarIntercambioReal() {
             }]
         };
         
+        // 7. Lanzar transacción nativa de World App
         const result = await MiniKit.sendTransaction(txPayload);
         
         if (result.status === "success") {
             alert("🚀 ¡Transacción enviada con éxito!");
         } else {
-            alert("❌ Transacción fallida o rechazada.");
+            alert("❌ Transacción fallida o rechazada por el usuario.");
         }
 
     } catch (error) {
-        console.error(error);
+        console.error("Error completo:", error);
         alert("Error crítico: " + error.message);
     }
 }
+    
     
                 
 
