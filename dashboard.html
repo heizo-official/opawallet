@@ -1148,6 +1148,16 @@ onclick="showPage('tokens-page', this)">
 
 <script>
 
+let globalWalletAddress = null;
+
+// Inicializar al cargar la página
+window.addEventListener('load', async () => {
+    if (MiniKit.isInstalled()) {
+        globalWalletAddress = MiniKit.walletAddress;
+        console.log("Wallet guardada:", globalWalletAddress);
+    }
+});
+
 function showPage(pageId, button){
 
 document.getElementById("wallet-page").style.display="none";
@@ -1458,15 +1468,7 @@ console.error(error);
 
 }
 
-let globalWalletAddress = null;
 
-// Inicializar al cargar la página
-window.addEventListener('load', async () => {
-    if (MiniKit.isInstalled()) {
-        globalWalletAddress = MiniKit.walletAddress;
-        console.log("Wallet guardada:", globalWalletAddress);
-    }
-});
     
 
 let startY = 0;
