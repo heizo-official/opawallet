@@ -1314,53 +1314,41 @@ loadMarkets();
 
 window.swapTokensList = [];
 
-fetch(
-`${SWAP_API}?address=${localStorage.getItem("walletAddress")}`
-)
+fetch(`${SWAP_API}?address=${localStorage.getItem("walletAddress")}`)
 .then(r=>r.json())
 .then(data=>{
+    // Unimos dando prioridad a 'sell' (que es el que trae tus balances reales de Alchemy)
+    const allTokens = [...data.sell, ...data.buy];
+    const uniqueTokens = [];
+    allTokens.forEach(t => {
+        if(!uniqueTokens.find(u => u.symbol === t.symbol)) {
+            uniqueTokens.push(t);
+        }
+    });
+    
+    window.swapTokensList = uniqueTokens;
 
-window.swapTokensList = [
-...data.buy,
-...data.sell
-];
+    document.getElementById("token-list").innerHTML = window.swapTokensList.map(token=>`
+    <div class="token-option" onclick="selectToken('${token.symbol}')">
+        <div class="token-left">
+            <div class="token-logo">
+                <img src="${token.logo}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" onerror="this.remove();this.parentNode.innerHTML='${token.symbol.substring(0,1)}';">
+            </div>
+            <div class="token-info">
+                <div class="token-name">${token.symbol}</div>
+                <div class="token-network">${token.name}</div>
+            </div>
+        </div>
+        <div class="token-value">${token.balance ? Number(token.balance).toFixed(4) : ''}</div>
+    </div>
+    `).join("");
 
-document.getElementById("token-list").innerHTML =
-window.swapTokensList.map(token=>`
-
-<div class="token-option"
-onclick="selectToken('${token.symbol}')">
-
-<div class="token-left">
-
-<div class="token-logo">
-
-<img
-src="${token.logo}"
-style="width:100%;height:100%;border-radius:50%;object-fit:cover;"
-onerror="this.remove();this.parentNode.innerHTML='${token.symbol.substring(0,1)}';">
-
-</div>
-
-<div class="token-info">
-
-<div class="token-name">
-${token.symbol}
-</div>
-
-<div class="token-network">
-${token.name}
-</div>
-
-</div>
-
-</div>
-
-</div>
-
-`).join("");
-
+    // Actualizamos la UI apenas cargan los datos
+    if (typeof actualizarBalanceSwapUI === "function") {
+        actualizarBalanceSwapUI();
+    }
 });
+    
 
 async function loadMarkets(){
 
