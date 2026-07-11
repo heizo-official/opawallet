@@ -1777,21 +1777,14 @@ async function procesarIntercambioReal() {
             return;
         }
 
-        // ====== PASO 1: OBTENER LA WALLET DE FORMA REAL Y OBLIGATORIA ======
-        // Si el SDK no la tiene en memoria, se la pedimos directamente al usuario
-        let walletAddress = MiniKit.walletAddress;
-        
-        if (!walletAddress) {
-            // Esto abre una pequeña validación nativa si el SDK se quedó "dormido"
-            const auth = await MiniKit.walletAuth();
-            walletAddress = auth?.walletAddress;
-        }
+        // ====== PASO 1: OBTENER LA WALLET DE FORMA DIRECTA Y SIN MODALES ======
+        const walletAddress = MiniKit.walletAddress;
 
         if (!walletAddress) {
-            alert("❌ Error: No se pudo obtener la dirección de la wallet. Intenta de nuevo.");
+            alert("❌ Error: La wallet no se ha sincronizado en esta pestaña. Por favor, regresa a la pestaña Wallet un segundo y vuelve.");
             return;
         }
-        // ==================================================================
+        // ====================================================================
 
         // 2. Obtener datos de la interfaz
         const fromSymbol = document.querySelectorAll(".token-select")[0].innerText.replace("▼", "").trim();
@@ -1829,7 +1822,7 @@ async function procesarIntercambioReal() {
             return;
         }
 
-        // 6. Lanzar transacción nativa (La ventana que me mostraste en la foto)
+        // 6. Lanzar transacción nativa (La ventana de la firma)
         const txPayload = {
             chainId: 480,
             transactions: [{
