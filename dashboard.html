@@ -1817,7 +1817,7 @@ async function procesarIntercambioReal() {
             return;
         }
 
-        // ====== PASO 6.1: CREAR EL PERMISO (APPROVE) ESTRICTO PARA 0x ======
+                // ====== PASO 6.1: EL SECRETO DE 0x (LA BÓVEDA PERMIT2) ======
         const erc20Abi = [{
             "inputs": [
                 { "internalType": "address", "name": "spender", "type": "address" },
@@ -1829,29 +1829,28 @@ async function procesarIntercambioReal() {
             "type": "function"
         }];
 
-        // Localizamos al contrato exacto que 0x designa para retirar los fondos
-        const spender = swapData.allowanceTarget || (swapData.transaction && swapData.transaction.allowanceTarget) || swapData.transaction.to;
+        // ESTA ES LA CLAVE: 0x exige que el permiso se le dé a este contrato universal, NO al router.
+        const PERMIT2_ADDRESS = "0x000000000022D473030F116dDEE9F6B43aC78BA3";
 
-        // Creamos la orden aprobando ÚNICAMENTE la cantidad que vas a gastar (amountInWei)
         const approveData = window.encodeFunctionData({
             abi: erc20Abi,
             functionName: "approve",
-            args: [spender, BigInt(amountInWei)]
+            // Le damos permiso a la bóveda exacta por la cantidad exacta
+            args: [PERMIT2_ADDRESS, BigInt(amountInWei)]
         });
 
-        // ====== PASO 6.2: LANZAR TRANSACCIÓN NATIVA (EMPAQUETADA) ======
+        // ====== PASO 6.2: LANZAR TRANSACCIÓN NATIVA ======
         const txPayload = {
-            chainId: 480, // World Chain ID Oficial
+            chainId: 480, // Red World Chain
             transactions: [
                 {
-                    to: fromToken.address, // El contrato del token que vendes (WLD)
-                    data: approveData,
-                    value: "0x0" // Formato Hexadecimal estricto obligatorio de MiniKit
+                    to: fromToken.address, // Token a vender (WLD)
+                    data: approveData
+                    // (Sin value, es más seguro para contratos ERC20)
                 },
                 {
-                    to: swapData.transaction.to, // El router de 0x
-                    data: swapData.transaction.data, // Las instrucciones matemáticas de 0x
-                    // Nos aseguramos de que el valor siempre sea un hexadecimal válido
+                    to: swapData.transaction.to, // Ahora sí, el Swap de 0x
+                    data: swapData.transaction.data,
                     value: swapData.transaction.value ? "0x" + BigInt(swapData.transaction.value).toString(16) : "0x0"
                 }
             ]
@@ -1870,6 +1869,7 @@ async function procesarIntercambioReal() {
         alert("Error: " + error.message);
     }
 }
+    
     
     
 
