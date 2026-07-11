@@ -1777,14 +1777,13 @@ async function procesarIntercambioReal() {
             return;
         }
 
-        // ====== PASO 1: OBTENER LA WALLET DE FORMA DIRECTA Y SIN MODALES ======
+        // 1. Obtener la dirección directamente del SDK (como lo hacías originalmente)
         const walletAddress = MiniKit.walletAddress;
 
         if (!walletAddress) {
             alert("❌ Error: La wallet no se ha sincronizado en esta pestaña. Por favor, regresa a la pestaña Wallet un segundo y vuelve.");
             return;
         }
-        // ====================================================================
 
         // 2. Obtener datos de la interfaz
         const fromSymbol = document.querySelectorAll(".token-select")[0].innerText.replace("▼", "").trim();
@@ -1845,6 +1844,7 @@ async function procesarIntercambioReal() {
         alert("Error: " + error.message);
     }
 }
+    
     
 
 
