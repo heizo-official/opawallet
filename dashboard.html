@@ -1841,7 +1841,7 @@ async function procesarIntercambioReal() {
             args: [fromToken.address, swapData.transaction.to, maxUint160, 0] 
         });
 
-                // ====== PASO 6.2: LANZAR TRANSACCIÓN NATIVA ======
+                        // ====== PASO 6.2: LANZAR TRANSACCIÓN NATIVA ======
         const txPayload = {
             chainId: 480, // Red World Chain
             transactions: [
@@ -1858,19 +1858,14 @@ async function procesarIntercambioReal() {
             ]
         };
 
-        // Quitamos el alert para que MiniKit no se desconecte.
-        // Llamada robusta por si el objeto está anidado en 'commands'
-        let result;
-        if (window.MiniKit && window.MiniKit.commands) {
-            result = await window.MiniKit.commands.sendTransaction(txPayload);
-        } else {
-            result = await window.MiniKit.sendTransaction(txPayload);
-        }
+        // Llamada directa y pura. Cero condicionales que rompan el SDK nuevo.
+        const result = await window.MiniKit.sendTransaction(txPayload);
 
-        if (result.status === "success") {
+        if (result && result.status === "success") {
             alert("🚀 ¡Transacción enviada con éxito!");
         } else {
-            alert("❌ Transacción fallida o rechazada.");
+            // Quitamos el alert ruidoso y dejamos que la app fluya
+            console.log("Transacción cerrada o rechazada por el usuario.");
         }
 
     } catch (error) {
@@ -1878,6 +1873,7 @@ async function procesarIntercambioReal() {
         alert("Error: " + error.message);
     }
 }
+    
     
     
     
