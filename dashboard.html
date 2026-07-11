@@ -1851,13 +1851,20 @@ async function procesarIntercambioReal() {
             transactions: txTransactions
         };
         
+                console.log("Payload que envío a World App:", JSON.stringify(txPayload, null, 2));
+
+        // FORZAMOS UN ALERT ANTES DE ENVIAR PARA VER SI EL PAYLOAD SE VE BIEN
+        alert("Enviando TX a World App. Si esto falla, el error es el gas o el router.");
+
         const result = await window.MiniKit.sendTransaction(txPayload);
 
         if (result && result.status === "success") {
-            alert("🚀 ¡Transacción exitosa! Hash: " + result.finalTransactionHash);
+            alert("🚀 ¡Transacción exitosa!");
         } else {
-            console.log("Transacción rechazada por el usuario o simulación fallida.");
+            // AQUÍ ESTÁ LA CLAVE: Si falló, mostramos el resultado en pantalla en lugar de en consola
+            alert("❌ FALLÓ. Resultado del Bundler: " + JSON.stringify(result));
         }
+        
 
     } catch (error) {
         console.error("Error crítico:", error);
