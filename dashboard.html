@@ -1810,7 +1810,11 @@ async function procesarIntercambioReal() {
             return;
         }
 
-        // 2. APROBACIÓN ESTRICTA (Formato viem que exige World Chain)
+                // 2. APROBACIÓN ESTRICTA Y CORRECTA PARA 0X
+        // 0x (Ciro) exige que los permisos se den a su 'allowanceTarget', no al contrato de ejecución.
+        // Si tu worker no lo devuelve en la raíz, usamos el spender correcto.
+        const spenderAddress = swapData.allowanceTarget || swapData.transaction.to;
+
         const approveData = window.encodeFunctionData({
             abi: [{
                 "inputs": [
@@ -1823,10 +1827,10 @@ async function procesarIntercambioReal() {
                 "type": "function"
             }],
             functionName: "approve",
-            // Se aprueba EXACTAMENTE el router que 0x va a usar para este swap y el monto exacto
-            args: [swapData.transaction.to, amountInWei] 
+            // AQUÍ ESTABA EL ERROR: Le dábamos permiso al ejecutor y no a la bóveda
+            args: [spenderAddress, amountInWei] 
         });
-
+        
                 // 3. EL BATCH OFICIAL DE MINIKIT (Con los valores HEXADECIMALES correctos)
         const txPayload = {
             chainId: 480, 
