@@ -1538,14 +1538,31 @@ function closeTokenModal(){
     document.getElementById("token-modal").style.display = "none";
 }
 
-function selectToken(token){
+function actualizarBalanceSwapUI() {
+    const tokenButtons = document.querySelectorAll(".token-select");
+    if(tokenButtons.length < 1) return;
 
+    const fromSymbol = tokenButtons[0].innerText.replace("▼", "").trim();
+    const fromToken = window.swapTokensList?.find(t => t.symbol === fromSymbol);
+    const balanceDiv = document.getElementById("swap-balance-from");
+
+    if (balanceDiv) {
+        if (fromToken && fromToken.balance !== undefined) {
+            balanceDiv.innerText = "Balance: " + Number(fromToken.balance).toFixed(4);
+        } else {
+            balanceDiv.innerText = "Balance: 0.00";
+        }
+    }
+}
+
+function selectToken(token){
     if(currentTokenButton){
         currentTokenButton.innerHTML = token + " ▼";
     }
-
     closeTokenModal();
+    actualizarBalanceSwapUI();
 }
+    
 
 function formatCompact(value){
 
@@ -1857,26 +1874,20 @@ async function procesarIntercambioReal() {
     
 
 
-
 function swapTokens(){
-
-    const tokenButtons =
-        document.querySelectorAll(".token-select");
-
+    const tokenButtons = document.querySelectorAll(".token-select");
     if(tokenButtons.length < 2) return;
 
-    const topToken =
-        tokenButtons[0].innerHTML;
+    const topToken = tokenButtons[0].innerHTML;
+    const bottomToken = tokenButtons[1].innerHTML;
 
-    const bottomToken =
-        tokenButtons[1].innerHTML;
+    tokenButtons[0].innerHTML = bottomToken;
+    tokenButtons[1].innerHTML = topToken;
 
-    tokenButtons[0].innerHTML =
-        bottomToken;
-
-    tokenButtons[1].innerHTML =
-        topToken;
+    actualizarBalanceSwapUI();
 }
+    
+
 
 function openReceiveModal(){
 
