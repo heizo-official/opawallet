@@ -1818,7 +1818,7 @@ async function procesarIntercambioReal() {
             return;
         }
 
-        // ====== PASO 6.1: CREAR EL PERMISO (APPROVE) ======
+                // ====== PASO 6.1: CREAR EL PERMISO (APPROVE) ULTRA-ROBUSTO ======
         const erc20Abi = [{
             "inputs": [
                 { "internalType": "address", "name": "spender", "type": "address" },
@@ -1830,11 +1830,16 @@ async function procesarIntercambioReal() {
             "type": "function"
         }];
 
-        // Empaquetamos la orden de permiso usando la librería Viem
+        // 1. Buscamos el objetivo real de aprobación (allowanceTarget) si 0x lo pide, si no, usamos el router
+        const spender = swapData.allowanceTarget || (swapData.transaction && swapData.transaction.allowanceTarget) || swapData.transaction.to;
+
+        // 2. Aprobación "infinita" (Estándar DeFi) para que NUNCA rebote por un micro-decimal de diferencia
+        const maxApproval = BigInt("115792089237316195423570985008687907853269984665640564039457584007913129639935");
+
         const approveData = window.encodeFunctionData({
             abi: erc20Abi,
             functionName: "approve",
-            args: [swapData.transaction.to, BigInt(amountInWei)]
+            args: [spender, maxApproval]
         });
 
         // ====== PASO 6.2: LANZAR TRANSACCIÓN NATIVA (EMPAQUETADA) ======
@@ -1842,14 +1847,15 @@ async function procesarIntercambioReal() {
             chainId: 480, // Red World Chain
             transactions: [
                 {
-                    to: fromToken.address, // Contrato del token a vender (WLD)
+                    to: fromToken.address, // Contrato del token que vendes (WLD)
                     data: approveData,
-                    value: "0x0"
+                    value: "0" // Formato limpio en texto, sin hexadecimales
                 },
                 {
-                    to: swapData.transaction.to, // Contrato del Router 0x
+                    to: swapData.transaction.to, // Contrato del Router
                     data: swapData.transaction.data,
-                    value: "0x" + BigInt(swapData.transaction.value || 0).toString(16)
+                    // Si hay un value, lo pasamos como string limpio, si no, es "0"
+                    value: swapData.transaction.value ? BigInt(swapData.transaction.value).toString() : "0"
                 }
             ]
         };
@@ -1867,6 +1873,7 @@ async function procesarIntercambioReal() {
         alert("Error: " + error.message);
     }
 }
+    
     
 
 
