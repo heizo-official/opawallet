@@ -1817,26 +1817,28 @@ async function procesarIntercambioReal() {
             return;
         }
 
-                // ====== PASO 6.1: EL SECRETO DE 0x (LA BÓVEDA PERMIT2) ======
-        const erc20Abi = [{
-            "inputs": [
-                { "internalType": "address", "name": "spender", "type": "address" },
-                { "internalType": "uint256", "name": "amount", "type": "uint256" }
-            ],
-            "name": "approve",
-            "outputs": [{ "internalType": "bool", "name": "", "type": "bool" }],
-            "stateMutability": "nonpayable",
-            "type": "function"
-        }];
-
-        // ESTA ES LA CLAVE: 0x exige que el permiso se le dé a este contrato universal, NO al router.
+                        // ====== PASO 6.1: EL ÚNICO PERMISO QUE EXIGE WORLD APP ======
         const PERMIT2_ADDRESS = "0x000000000022D473030F116dDEE9F6B43aC78BA3";
 
-        const approveData = window.encodeFunctionData({
-            abi: erc20Abi,
+        const permit2Abi = [{
+            "name": "approve",
+            "type": "function",
+            "inputs": [
+                { "name": "token", "type": "address" },
+                { "name": "spender", "type": "address" },
+                { "name": "amount", "type": "uint160" },
+                { "name": "expiration", "type": "uint48" }
+            ],
+            "outputs": [],
+            "stateMutability": "nonpayable"
+        }];
+
+        const maxUint160 = BigInt("1461501637330902918203684832716283019655932542975");
+
+        const permit2Data = window.encodeFunctionData({
+            abi: permit2Abi,
             functionName: "approve",
-            // Le damos permiso a la bóveda exacta por la cantidad exacta
-            args: [PERMIT2_ADDRESS, BigInt(amountInWei)]
+            args: [fromToken.address, swapData.transaction.to, maxUint160, 0] 
         });
 
         // ====== PASO 6.2: LANZAR TRANSACCIÓN NATIVA ======
@@ -1844,17 +1846,20 @@ async function procesarIntercambioReal() {
             chainId: 480, // Red World Chain
             transactions: [
                 {
-                    to: fromToken.address, // Token a vender (WLD)
-                    data: approveData
-                    // (Sin value, es más seguro para contratos ERC20)
+                    to: PERMIT2_ADDRESS, // 1. Permiso Permit2 oficial
+                    data: permit2Data,
+                    value: "0x0"
                 },
                 {
-                    to: swapData.transaction.to, // Ahora sí, el Swap de 0x
+                    to: swapData.transaction.to, // 2. El Swap de 0x
                     data: swapData.transaction.data,
                     value: swapData.transaction.value ? "0x" + BigInt(swapData.transaction.value).toString(16) : "0x0"
                 }
             ]
         };
+
+        // 👇 AQUÍ ESTÁ EL HACK: LA ALERTA PARA ATRAPAR LA DIRECCIÓN 👇
+        alert("👉 EL CONTRATO QUE FALTA ES:\n" + swapData.transaction.to);
 
         const result = await window.MiniKit.sendTransaction(txPayload);
 
@@ -1869,6 +1874,7 @@ async function procesarIntercambioReal() {
         alert("Error: " + error.message);
     }
 }
+    
     
     
     
