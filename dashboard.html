@@ -1458,6 +1458,17 @@ console.error(error);
 
 }
 
+let globalWalletAddress = null;
+
+// Inicializar al cargar la página
+window.addEventListener('load', async () => {
+    if (MiniKit.isInstalled()) {
+        globalWalletAddress = MiniKit.walletAddress;
+        console.log("Wallet guardada:", globalWalletAddress);
+    }
+});
+    
+
 let startY = 0;
 let pulling = false;
 
