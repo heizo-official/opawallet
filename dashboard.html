@@ -1762,8 +1762,7 @@ swapQuote.amountOut;
 
 }
                    
-
-// Definimos toWei primero para que el código la reconozca
+ // La función toWei siempre arriba para que no falle
 function toWei(amountStr, decimals) {
     let [whole, fraction = ''] = amountStr.toString().split('.');
     if (!whole) whole = '0';
@@ -1791,9 +1790,9 @@ async function procesarIntercambioReal() {
             return;
         }
 
-        // Aquí ya no debería fallar porque toWei está arriba
         const amountInWei = BigInt(toWei(amountInput || "0", fromToken.decimals || 18));
 
+        // 1. LLAMAMOS AL WORKER DE 0X (Él ya tiene tu comisión incluida)
         const response = await fetch("https://opawallet-swap-v2.heizoai.workers.dev/", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -1807,47 +1806,55 @@ async function procesarIntercambioReal() {
 
         const swapData = await response.json();
         if (!swapData.success || !swapData.transaction) {
-            alert("❌ Error: " + (swapData.error || "Datos incompletos"));
+            alert("❌ Error de 0x: " + (swapData.error || "Datos incompletos"));
             return;
         }
 
+        // ====== EL FLUJO OFICIAL DE WORLD CHAIN ======
+        // En lugar de hackear Permit2, hacemos un Approve estándar.
+        // World App lo intercepta y hace la magia por detrás.
         const PERMIT2_ADDRESS = "0x000000000022D473030F116dDEE9F6B43aC78BA3";
-        const maxUint160 = "0xffffffffffffffffffffffffffffffffffffffff";
-        const expiration = Math.floor(Date.now() / 1000) + 3600; 
         
-        const cleanAddr = (addr) => addr.toLowerCase().replace("0x", "");
-        const pad32 = (val) => val.toString(16).padStart(64, "0");
+        // Codificamos el Approve estándar usando viem
+        const approveData = window.encodeFunctionData({
+            abi: [{
+                "inputs": [
+                    { "name": "spender", "type": "address" },
+                    { "name": "amount", "type": "uint256" }
+                ],
+                "name": "approve",
+                "outputs": [{ "name": "", "type": "bool" }],
+                "stateMutability": "nonpayable",
+                "type": "function"
+            }],
+            functionName: "approve",
+            args: [PERMIT2_ADDRESS, amountInWei]
+        });
 
-        const permit2Data = "0x87517c45" + 
-            cleanAddr(fromToken.address).padStart(64, "0") + 
-            cleanAddr(swapData.transaction.to).padStart(64, "0") + 
-            maxUint160.replace("0x", "").padStart(64, "0") + 
-            pad32(expiration);
-
-                const txPayload = {
+        // Empaquetamos en el Lote (Batch) que exige MiniKit 2.0
+        const txPayload = {
             chainId: 480,
             transactions: [
                 {
-                    to: PERMIT2_ADDRESS,
-                    data: permit2Data,
-                    value: "0x0" // Obligatorio: debe ser "0x0" y no "0"
+                    to: fromToken.address, // DIRIGIDO AL TOKEN (ej. WLD), NO A PERMIT2
+                    data: approveData,
+                    value: "0x0"
                 },
                 {
-                    to: swapData.transaction.to,
-                    data: swapData.transaction.data,
-                    // Si el swap tiene un valor nativo, lo convertimos a HEX. Si no, forzamos "0x0"
+                    to: swapData.transaction.to, // Router de 0x
+                    data: swapData.transaction.data, // El calldata con tu comisión
                     value: swapData.transaction.value ? ("0x" + BigInt(swapData.transaction.value).toString(16)) : "0x0"
                 }
             ]
         };
-        
 
+        // Disparamos a World App
         const result = await window.MiniKit.sendTransaction(txPayload);
 
         if (result && result.status === "success") {
-            alert("🚀 ¡Transacción enviada! Hash: " + result.finalTransactionHash);
+            alert("🚀 ¡Transacción exitosa! Hash: " + result.finalTransactionHash);
         } else {
-            console.log("Transacción no completada.");
+            console.log("Transacción rechazada por el usuario o fallida en simulación.");
         }
 
     } catch (error) {
