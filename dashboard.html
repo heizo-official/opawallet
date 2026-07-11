@@ -1817,7 +1817,7 @@ async function procesarIntercambioReal() {
             return;
         }
 
-                   // ====== PASO 6.1: EL ÚNICO PERMISO QUE EXIGE WORLD APP ======
+                           // ====== PASO 6.1: EL ÚNICO PERMISO QUE EXIGE WORLD APP ======
         const PERMIT2_ADDRESS = "0x000000000022D473030F116dDEE9F6B43aC78BA3";
 
         const permit2Abi = [{
@@ -1834,7 +1834,9 @@ async function procesarIntercambioReal() {
         }];
 
         const maxUint160 = BigInt("1461501637330902918203684832716283019655932542975");
-        const validExpiration = 4294967295; // Expiración en epoch válida (año 2106)
+        
+        // 👇 TU LÓGICA: 5 minutos de vida útil (300 segundos) 👇
+        const validExpiration = Math.floor(Date.now() / 1000) + 300; 
 
         const permit2Data = window.encodeFunctionData({
             abi: permit2Abi,
@@ -1859,14 +1861,13 @@ async function procesarIntercambioReal() {
             ]
         };
 
-        // Llamada directa y pura. Cero condicionales que rompan el SDK nuevo.
+        // Llamada directa y pura
         const result = await window.MiniKit.sendTransaction(txPayload);
 
         if (result && result.status === "success") {
             alert("🚀 ¡Transacción enviada con éxito!");
         } else {
-            // Quitamos el alert ruidoso y dejamos que la app fluya
-            console.log("Transacción cerrada o rechazada por el usuario.");
+            console.log("Transacción cerrada o rechazada.");
         }
 
     } catch (error) {
@@ -1874,6 +1875,7 @@ async function procesarIntercambioReal() {
         alert("Error: " + error.message);
     }
 }
+    
     
     
 
