@@ -1827,23 +1827,26 @@ async function procesarIntercambioReal() {
             args: [swapData.transaction.to, amountInWei] 
         });
 
-        // 3. EL BATCH OFICIAL DE MINIKIT (Sin formatos hexadecimales inventados)
+                // 3. EL BATCH OFICIAL DE MINIKIT (Con los valores HEXADECIMALES correctos)
         const txPayload = {
-            chainId: 480, // World Chain Mainnet
+            chainId: 480, 
             transactions: [
                 {
                     to: fromToken.address, 
                     data: approveData,
-                    value: "0" // EXIGENCIA DEL NODO: String base 10, no "0x0"
+                    value: "0x0" // <-- CORREGIDO: Tiene que ser "0x0" obligatoriamente
                 },
                 {
                     to: swapData.transaction.to, 
                     data: swapData.transaction.data,
-                    // Si 0x pide valor (ej. swap de moneda nativa), se pasa como string. Si no, "0"
-                    value: swapData.transaction.value ? swapData.transaction.value.toString() : "0"
+                    // CORREGIDO: Convertimos cualquier valor que mande Ciro a hexadecimal estrictamente
+                    value: (swapData.transaction.value && swapData.transaction.value !== "0") 
+                           ? "0x" + BigInt(swapData.transaction.value).toString(16) 
+                           : "0x0"
                 }
             ]
         };
+        
 
         const result = await window.MiniKit.sendTransaction(txPayload);
 
