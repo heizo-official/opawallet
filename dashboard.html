@@ -1762,8 +1762,7 @@ swapQuote.amountOut;
 
 }
                    
- 
-// Conversión matemática a Wei 
+// La conversión a Wei intacta
 function toWei(amountStr, decimals) {
     let [whole, fraction = ''] = amountStr.toString().split('.');
     if (!whole) whole = '0';
@@ -1793,7 +1792,7 @@ async function procesarIntercambioReal() {
 
         const amountInWei = BigInt(toWei(amountInput || "0", fromToken.decimals || 18));
 
-        // 1. LLAMADA A TU WORKER (Ciro / 0x) CON TU COMISIÓN
+        // 1. LLAMADA AL WORKER DE 0X (CIRO)
         const response = await fetch("https://opawallet-swap-v2.heizoai.workers.dev/", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -1807,12 +1806,11 @@ async function procesarIntercambioReal() {
 
         const swapData = await response.json();
         if (!swapData.success || !swapData.transaction) {
-            alert("❌ Error de 0x: " + (swapData.error || "Datos incompletos"));
+            alert("❌ Error de cotización: " + (swapData.error || "Datos incompletos"));
             return;
         }
 
-        // ====== FLUJO OFICIAL Y ESTRICTO DE WORLD CHAIN ======
-        // Codificamos un Approve estándar de ERC20 directo al Router de 0x
+        // 2. APROBACIÓN ESTRICTA (Formato viem que exige World Chain)
         const approveData = window.encodeFunctionData({
             abi: [{
                 "inputs": [
@@ -1825,22 +1823,24 @@ async function procesarIntercambioReal() {
                 "type": "function"
             }],
             functionName: "approve",
-            args: [swapData.transaction.to, amountInWei] // Damos permiso exacto al Router de 0x
+            // Se aprueba EXACTAMENTE el router que 0x va a usar para este swap y el monto exacto
+            args: [swapData.transaction.to, amountInWei] 
         });
 
-        // Empaquetamos en Lote: [Aprobar Token] -> [Ejecutar Swap en 0x]
+        // 3. EL BATCH OFICIAL DE MINIKIT (Sin formatos hexadecimales inventados)
         const txPayload = {
-            chainId: 480,
+            chainId: 480, // World Chain Mainnet
             transactions: [
                 {
-                    to: fromToken.address, // Este es WLD, por eso debe estar en tu portal
+                    to: fromToken.address, 
                     data: approveData,
-                    value: "0x0"
+                    value: "0" // EXIGENCIA DEL NODO: String base 10, no "0x0"
                 },
                 {
-                    to: swapData.transaction.to, // Router de 0x
+                    to: swapData.transaction.to, 
                     data: swapData.transaction.data,
-                    value: swapData.transaction.value ? ("0x" + BigInt(swapData.transaction.value).toString(16)) : "0x0"
+                    // Si 0x pide valor (ej. swap de moneda nativa), se pasa como string. Si no, "0"
+                    value: swapData.transaction.value ? swapData.transaction.value.toString() : "0"
                 }
             ]
         };
@@ -1850,16 +1850,16 @@ async function procesarIntercambioReal() {
         if (result && result.status === "success") {
             alert("🚀 ¡Transacción exitosa! Hash: " + result.finalTransactionHash);
         } else {
-            console.log("Transacción rechazada o fallida en simulación.");
+            console.log("Transacción rechazada por el usuario o simulación fallida.");
         }
 
     } catch (error) {
         console.error("Error crítico:", error);
         alert("Error: " + error.message);
     }
-}
+ }
     
-    
+
 
 
 function swapTokens(){
