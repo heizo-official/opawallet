@@ -1769,24 +1769,29 @@ function toWei(amountStr, decimals) {
 
 async function procesarIntercambioReal() {
     try {
+        // 1. Verificamos que MiniKit esté listo
         if (!MiniKit.isInstalled()) {
             alert("⚠️ MiniKit no está activo.");
             return;
         }
 
-        // 1. Obtener datos de la interfaz
+        // 2. ¡EL CAMBIO CLAVE!: Forzamos la obtención de la dirección
+        // A veces MiniKit.walletAddress es undefined si no se solicita antes
+        const { commandPayload } = await MiniKit.commandsAsync.getWalletAddress();
+        const walletAddress = commandPayload?.address;
+
+        if (!walletAddress) {
+            alert("❌ Error: No se pudo obtener la dirección. Intenta recargar la app.");
+            return;
+        }
+
+        // Ahora continuamos con el resto de tu código usando 'walletAddress'
         const fromSymbol = document.querySelectorAll(".token-select")[0].innerText.replace("▼", "").trim();
         const toSymbol = document.querySelectorAll(".token-select")[1].innerText.replace("▼", "").trim();
         const amountInput = document.querySelectorAll(".swap-amount")[0].value;
-
-        // 2. Validación de búsqueda de tokens (evita que el código explote)
-        const fromToken = window.swapTokensList.find(t => t.symbol === fromSymbol);
-        const toToken = window.swapTokensList.find(t => t.symbol === toSymbol);
-
-        if (!fromToken || !toToken) {
-            alert("❌ Error: No se encontraron los tokens seleccionados.");
-            return;
-        }
+        
+        // ... (el resto del código que ya tienes)
+        
 
         // 3. Validación de Wallet
         const walletAddress = MiniKit.walletAddress;
