@@ -1762,7 +1762,7 @@ swapQuote.amountOut;
 
 }
 
-// Conversión matemática a Wei sin depender de librerías externas (Wagmi/Ethers)
+// Conversión matemática a Wei sin depender de librerías externas
 function toWei(amountStr, decimals) {
     let [whole, fraction = ''] = amountStr.toString().split('.');
     if (!whole) whole = '0';
@@ -1777,13 +1777,26 @@ async function procesarIntercambioReal() {
             return;
         }
 
-        // 1. Obtener la dirección directamente del SDK (como lo hacías originalmente)
-        const walletAddress = MiniKit.walletAddress;
+        // ====== SALVAVIDAS NATIVO ======
+        let walletAddress = MiniKit.walletAddress;
 
+        // Si el SDK perdió la dirección por el cambio de pestaña, lo forzamos a pedirla de nuevo
         if (!walletAddress) {
-            alert("❌ Error: La wallet no se ha sincronizado en esta pestaña. Por favor, regresa a la pestaña Wallet un segundo y vuelve.");
+            await MiniKit.walletAuth({
+                nonce: Math.random().toString(36).substring(2, 15), // Código de seguridad aleatorio
+                statement: 'Verifica tu conexión para realizar el Swap'
+            });
+            
+            // Inmediatamente después, la memoria del SDK se restaura
+            walletAddress = MiniKit.walletAddress;
+        }
+
+        // Si después de forzarlo sigue sin darla, la sesión de la App colapsó
+        if (!walletAddress) {
+            alert("❌ Error fatal: La World App perdió la conexión con tu wallet. Por favor, reinicia la Mini App.");
             return;
         }
+        // ===============================
 
         // 2. Obtener datos de la interfaz
         const fromSymbol = document.querySelectorAll(".token-select")[0].innerText.replace("▼", "").trim();
