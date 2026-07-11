@@ -1762,7 +1762,8 @@ swapQuote.amountOut;
 
 }
                    
- // La función toWei siempre arriba para que no falle
+ 
+// Conversión matemática a Wei 
 function toWei(amountStr, decimals) {
     let [whole, fraction = ''] = amountStr.toString().split('.');
     if (!whole) whole = '0';
@@ -1792,7 +1793,7 @@ async function procesarIntercambioReal() {
 
         const amountInWei = BigInt(toWei(amountInput || "0", fromToken.decimals || 18));
 
-        // 1. LLAMAMOS AL WORKER DE 0X (Él ya tiene tu comisión incluida)
+        // 1. LLAMADA A TU WORKER (Ciro / 0x) CON TU COMISIÓN
         const response = await fetch("https://opawallet-swap-v2.heizoai.workers.dev/", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -1810,12 +1811,8 @@ async function procesarIntercambioReal() {
             return;
         }
 
-        // ====== EL FLUJO OFICIAL DE WORLD CHAIN ======
-        // En lugar de hackear Permit2, hacemos un Approve estándar.
-        // World App lo intercepta y hace la magia por detrás.
-        const PERMIT2_ADDRESS = "0x000000000022D473030F116dDEE9F6B43aC78BA3";
-        
-        // Codificamos el Approve estándar usando viem
+        // ====== FLUJO OFICIAL Y ESTRICTO DE WORLD CHAIN ======
+        // Codificamos un Approve estándar de ERC20 directo al Router de 0x
         const approveData = window.encodeFunctionData({
             abi: [{
                 "inputs": [
@@ -1828,33 +1825,32 @@ async function procesarIntercambioReal() {
                 "type": "function"
             }],
             functionName: "approve",
-            args: [PERMIT2_ADDRESS, amountInWei]
+            args: [swapData.transaction.to, amountInWei] // Damos permiso exacto al Router de 0x
         });
 
-        // Empaquetamos en el Lote (Batch) que exige MiniKit 2.0
+        // Empaquetamos en Lote: [Aprobar Token] -> [Ejecutar Swap en 0x]
         const txPayload = {
             chainId: 480,
             transactions: [
                 {
-                    to: fromToken.address, // DIRIGIDO AL TOKEN (ej. WLD), NO A PERMIT2
+                    to: fromToken.address, // Este es WLD, por eso debe estar en tu portal
                     data: approveData,
                     value: "0x0"
                 },
                 {
                     to: swapData.transaction.to, // Router de 0x
-                    data: swapData.transaction.data, // El calldata con tu comisión
+                    data: swapData.transaction.data,
                     value: swapData.transaction.value ? ("0x" + BigInt(swapData.transaction.value).toString(16)) : "0x0"
                 }
             ]
         };
 
-        // Disparamos a World App
         const result = await window.MiniKit.sendTransaction(txPayload);
 
         if (result && result.status === "success") {
             alert("🚀 ¡Transacción exitosa! Hash: " + result.finalTransactionHash);
         } else {
-            console.log("Transacción rechazada por el usuario o fallida en simulación.");
+            console.log("Transacción rechazada o fallida en simulación.");
         }
 
     } catch (error) {
@@ -1862,6 +1858,7 @@ async function procesarIntercambioReal() {
         alert("Error: " + error.message);
     }
 }
+    
     
 
 
