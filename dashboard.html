@@ -1811,28 +1811,24 @@ async function procesarIntercambioReal() {
             return;
         }
 
-        // ====== FLUJO ESTRICTO ERC-4337 (ABSTRACCIÓN DE CUENTA WORLD APP) ======
         const PERMIT2_ADDRESS = "0x000000000022D473030F116dDEE9F6B43aC78BA3";
-        
-        // El monto máximo permitido en hexadecimal (max uint160)
         const maxUint160Hex = "ffffffffffffffffffffffffffffffffffffffff";
-        // Según documentación de World Chain: Expiración 0 = consumido de inmediato
-        const expirationHex = "0000000000000000000000000000000000000000000000000000000000000000";
+        
+        // 👇 EL ARREGLO FINAL: 30 Días oficiales. Nunca más pongas un 0 aquí.
+        const validExpiration = Math.floor(Date.now() / 1000) + 2592000;
+        const expirationHex = validExpiration.toString(16).padStart(64, "0");
 
-        // Función matemática para limpiar y rellenar las direcciones a 64 caracteres
         const cleanAndPad = (addr) => addr.toLowerCase().replace("0x", "").padStart(64, "0");
 
-        // Empaquetado a mano invulnerable a fallos de librerías
-        const selector = "0x87517c45"; // Hash de approve()
+        const selector = "0x87517c45"; 
         const permit2Data = selector 
             + cleanAndPad(fromToken.address) 
-            + cleanAndPad(swapData.transaction.to) // Autoriza al router de 0x que cobró la comisión
+            + cleanAndPad(swapData.transaction.to) 
             + maxUint160Hex.padStart(64, "0") 
             + expirationHex;
 
-        // La transacción en Lote que exige MiniKit
         const txPayload = {
-            chainId: 480, // Red World Chain
+            chainId: 480, 
             transactions: [
                 {
                     to: PERMIT2_ADDRESS, 
@@ -1840,8 +1836,8 @@ async function procesarIntercambioReal() {
                     value: "0x0"
                 },
                 {
-                    to: swapData.transaction.to, // Router de 0x
-                    data: swapData.transaction.data, // Calldata optimizado
+                    to: swapData.transaction.to, 
+                    data: swapData.transaction.data, 
                     value: swapData.transaction.value ? "0x" + BigInt(swapData.transaction.value).toString(16) : "0x0"
                 }
             ]
@@ -1850,7 +1846,7 @@ async function procesarIntercambioReal() {
         const result = await window.MiniKit.sendTransaction(txPayload);
 
         if (result && result.status === "success") {
-            alert("🚀 ¡Transacción enviada con éxito al agregador! UserOpHash: " + result.userOpHash);
+            alert("🚀 ¡Transacción enviada con éxito! UserOpHash: " + result.userOpHash);
         } else {
             console.log("Transacción cerrada o rechazada.");
         }
@@ -1859,7 +1855,8 @@ async function procesarIntercambioReal() {
         console.error("Error crítico:", error);
         alert("Error de ejecución: " + error.message);
     }
-                                                                                           }
+                    }
+                    }
             
 
 
