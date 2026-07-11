@@ -1817,32 +1817,23 @@ async function procesarIntercambioReal() {
             return;
         }
 
-        // ====== PASO 6.1: EL ÚNICO PERMISO QUE EXIGE WORLD APP ======
+                // ====== PASO 6.1: EL ÚNICO PERMISO QUE EXIGE WORLD APP ======
         const PERMIT2_ADDRESS = "0x000000000022D473030F116dDEE9F6B43aC78BA3";
-
-        const permit2Abi = [{
-            "name": "approve",
-            "type": "function",
-            "inputs": [
-                { "name": "token", "type": "address" },
-                { "name": "spender", "type": "address" },
-                { "name": "amount", "type": "uint160" },
-                { "name": "expiration", "type": "uint48" }
-            ],
-            "outputs": [],
-            "stateMutability": "nonpayable"
-        }];
 
         const maxUint160 = BigInt("1461501637330902918203684832716283019655932542975");
         
-        // 👇 MODIFICACIÓN: El estándar exacto de World App de 30 días (2592000 segundos) 👇
+        // 👇 El estándar exacto de World App de 30 días (2592000 segundos) 👇
         const validExpiration = Math.floor(Date.now() / 1000) + 2592000; 
 
-        const permit2Data = window.encodeFunctionData({
-            abi: permit2Abi,
-            functionName: "approve",
-            args: [fromToken.address, swapData.transaction.to, maxUint160, validExpiration] 
-        });
+        // 👇 FUNCIÓN NATIVA: Empaquetamos a mano para que NUNCA vuelva a fallar la librería 👇
+        const selector = "0x87517c45"; // Hash oficial de approve(address,address,uint160,uint48)
+        const pad32 = (str) => str.replace("0x", "").padStart(64, "0");
+        
+        const permit2Data = selector 
+            + pad32(fromToken.address) 
+            + pad32(swapData.transaction.to) 
+            + pad32(maxUint160.toString(16)) 
+            + pad32(validExpiration.toString(16));
 
         // ====== PASO 6.2: LANZAR TRANSACCIÓN NATIVA ======
         const txPayload = {
@@ -1875,6 +1866,7 @@ async function procesarIntercambioReal() {
         alert("Error: " + error.message);
     }
 }
+    
     
 
 
