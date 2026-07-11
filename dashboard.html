@@ -1769,62 +1769,59 @@ function toWei(amountStr, decimals) {
 
 async function procesarIntercambioReal() {
     try {
-        // 1. Verificamos que MiniKit esté listo
+        // 1. Verificación básica de MiniKit
         if (!MiniKit.isInstalled()) {
             alert("⚠️ MiniKit no está activo.");
             return;
         }
 
-        // 2. ¡EL CAMBIO CLAVE!: Forzamos la obtención de la dirección
-        // A veces MiniKit.walletAddress es undefined si no se solicita antes
-        const { commandPayload } = await MiniKit.commandsAsync.getWalletAddress();
-        const walletAddress = commandPayload?.address;
-
-        if (!walletAddress) {
-            alert("❌ Error: No se pudo obtener la dirección. Intenta recargar la app.");
-            return;
-        }
-
-        // Ahora continuamos con el resto de tu código usando 'walletAddress'
+        // 2. Obtención de datos de la interfaz
         const fromSymbol = document.querySelectorAll(".token-select")[0].innerText.replace("▼", "").trim();
         const toSymbol = document.querySelectorAll(".token-select")[1].innerText.replace("▼", "").trim();
         const amountInput = document.querySelectorAll(".swap-amount")[0].value;
-        
-        // ... (el resto del código que ya tienes)
-        
 
-        // 3. Validación de Wallet
-        const walletAddress = MiniKit.walletAddress;
-        if (!walletAddress) {
-            alert("❌ Error: No se detectó la dirección de la wallet.");
+        // 3. Validación de tokens
+        const fromToken = window.swapTokensList.find(t => t.symbol === fromSymbol);
+        const toToken = window.swapTokensList.find(t => t.symbol === toSymbol);
+
+        if (!fromToken || !toToken) {
+            alert("❌ Error: No se encontraron los tokens seleccionados.");
             return;
         }
 
-        // 4. Conversión a Wei (asegurando que amountInput sea un número)
+        // 4. Obtención segura de Wallet (usando el comando asíncrono)
+        // Esto evita el error de "no detectada"
+        const resultWallet = await MiniKit.commandsAsync.getWalletAddress();
+        const walletAddress = resultWallet?.commandPayload?.address;
+
+        if (!walletAddress) {
+            alert("❌ Error: No se pudo conectar con la wallet. Intenta recargar.");
+            return;
+        }
+
+        // 5. Conversión a Wei
         const amountInWei = toWei(amountInput || "0", fromToken.decimals || 18);
 
-        // 5. Llamada al Worker
+        // 6. Llamada al Worker
         const response = await fetch("https://opawallet-swap-v2.heizoai.workers.dev/", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
                 sellToken: fromToken.address,
                 buyToken: toToken.address,
-                sellAmount: amountInWei.toString(), // Aseguramos que sea string
+                sellAmount: amountInWei.toString(),
                 taker: walletAddress
             })
         });
 
         const swapData = await response.json();
-        
-        // Si el worker falla, mostramos el error específico que viene del servidor
+
         if (!swapData.success) {
-            alert("❌ Error del servidor: " + (swapData.error || "Desconocido"));
+            alert("❌ Error del servidor: " + (swapData.error || "Error desconocido"));
             return;
         }
 
-        // 6. Preparar transacción para MiniKit
-        // World Chain maneja Permit2 automáticamente, enviamos solo el swap del router
+        // 7. Lanzar transacción nativa (Simplificada para World Chain)
         const txPayload = {
             chainId: 480,
             transactions: [{
@@ -1833,24 +1830,21 @@ async function procesarIntercambioReal() {
                 value: "0x" + BigInt(swapData.transaction.value || 0).toString(16)
             }]
         };
-        
-        // 7. Lanzar transacción nativa de World App
+
         const result = await MiniKit.sendTransaction(txPayload);
-        
+
         if (result.status === "success") {
             alert("🚀 ¡Transacción enviada con éxito!");
         } else {
-            alert("❌ Transacción fallida o rechazada por el usuario.");
+            alert("❌ Transacción fallida o rechazada.");
         }
 
     } catch (error) {
-        console.error("Error completo:", error);
+        console.error("Error crítico:", error);
         alert("Error crítico: " + error.message);
     }
 }
     
-    
-                
 
 function swapTokens(){
 
