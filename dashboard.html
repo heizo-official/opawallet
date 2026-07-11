@@ -1772,19 +1772,12 @@ function toWei(amountStr, decimals) {
 
 async function procesarIntercambioReal() {
     try {
-        // Accedemos directamente a la instancia global para que no se pierda entre pestañas
-        const sdk = window.MiniKit;
-
-        if (!sdk || !sdk.isInstalled()) {
-            alert("⚠️ MiniKit no está activo o se está inicializando.");
-            return;
-        }
-
-        // 1. Obtener la dirección completa desde el objeto global window
-        const walletAddress = sdk.walletAddress;
+        // 1. LEER LA DIRECCIÓN DE TU PROPIA MEMORIA (localStorage)
+        // Usamos exactamente la misma variable con la que ya muestras el "Connected"
+        const walletAddress = localStorage.getItem("walletAddress");
 
         if (!walletAddress) {
-            alert("❌ Error: Wallet no detectada. Por favor, regresa un segundo a la pestaña Wallet para sincronizar e intenta de nuevo.");
+            alert("❌ Error: Wallet no detectada. Por favor, asegúrate de estar conectado.");
             return;
         }
 
@@ -1805,7 +1798,7 @@ async function procesarIntercambioReal() {
         // 4. Conversión a Wei
         const amountInWei = toWei(amountInput || "0", fromToken.decimals || 18);
 
-        // 5. Llamada al Worker (Aquí es donde se genera la transacción)
+        // 5. Llamada al Worker
         const response = await fetch("https://opawallet-swap-v2.heizoai.workers.dev/", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -1813,7 +1806,7 @@ async function procesarIntercambioReal() {
                 sellToken: fromToken.address,
                 buyToken: toToken.address,
                 sellAmount: amountInWei.toString(),
-                taker: walletAddress
+                taker: walletAddress // ¡Aquí enviamos tu dirección completa de localStorage!
             })
         });
 
@@ -1824,7 +1817,7 @@ async function procesarIntercambioReal() {
             return;
         }
 
-        // 6. Lanzar transacción nativa (La ventana de la firma en World App)
+        // 6. Lanzar transacción nativa (La ventana de la firma)
         const txPayload = {
             chainId: 480,
             transactions: [{
@@ -1834,7 +1827,7 @@ async function procesarIntercambioReal() {
             }]
         };
 
-        const result = await sdk.sendTransaction(txPayload);
+        const result = await window.MiniKit.sendTransaction(txPayload);
 
         if (result.status === "success") {
             alert("🚀 ¡Transacción enviada con éxito!");
@@ -1846,7 +1839,7 @@ async function procesarIntercambioReal() {
         console.error("Error crítico:", error);
         alert("Error: " + error.message);
     }
- }
+}
     
     
 
