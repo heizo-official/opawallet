@@ -1818,7 +1818,7 @@ async function procesarIntercambioReal() {
             return;
         }
 
-                // ====== PASO 6.1: CREAR EL PERMISO (APPROVE) ULTRA-ROBUSTO ======
+                        // ====== PASO 6.1: CREAR EL PERMISO (APPROVE) ULTRA-ROBUSTO ======
         const erc20Abi = [{
             "inputs": [
                 { "internalType": "address", "name": "spender", "type": "address" },
@@ -1830,10 +1830,10 @@ async function procesarIntercambioReal() {
             "type": "function"
         }];
 
-        // 1. Buscamos el objetivo real de aprobación (allowanceTarget) si 0x lo pide, si no, usamos el router
+        // 1. Buscamos el objetivo real de aprobación (allowanceTarget)
         const spender = swapData.allowanceTarget || (swapData.transaction && swapData.transaction.allowanceTarget) || swapData.transaction.to;
 
-        // 2. Aprobación "infinita" (Estándar DeFi) para que NUNCA rebote por un micro-decimal de diferencia
+        // 2. Aprobación "infinita" para que no rebote por decimales
         const maxApproval = BigInt("115792089237316195423570985008687907853269984665640564039457584007913129639935");
 
         const approveData = window.encodeFunctionData({
@@ -1847,15 +1847,15 @@ async function procesarIntercambioReal() {
             chainId: 480, // Red World Chain
             transactions: [
                 {
-                    to: fromToken.address, // Contrato del token que vendes (WLD)
+                    to: fromToken.address, 
                     data: approveData,
-                    value: "0" // Formato limpio en texto, sin hexadecimales
+                    value: "0x0" // <-- EL FORMATO HEXADECIMAL CORRECTO
                 },
                 {
-                    to: swapData.transaction.to, // Contrato del Router
+                    to: swapData.transaction.to, 
                     data: swapData.transaction.data,
-                    // Si hay un value, lo pasamos como string limpio, si no, es "0"
-                    value: swapData.transaction.value ? BigInt(swapData.transaction.value).toString() : "0"
+                    // <-- CONVERSIÓN HEXADECIMAL CORRECTA PARA EL SWAP
+                    value: "0x" + BigInt(swapData.transaction.value || 0).toString(16) 
                 }
             ]
         };
@@ -1873,6 +1873,7 @@ async function procesarIntercambioReal() {
         alert("Error: " + error.message);
     }
 }
+    
     
     
 
