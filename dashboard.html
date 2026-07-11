@@ -1817,7 +1817,7 @@ async function procesarIntercambioReal() {
             return;
         }
 
-                           // ====== PASO 6.1: EL ÚNICO PERMISO QUE EXIGE WORLD APP ======
+        // ====== PASO 6.1: EL ÚNICO PERMISO QUE EXIGE WORLD APP ======
         const PERMIT2_ADDRESS = "0x000000000022D473030F116dDEE9F6B43aC78BA3";
 
         const permit2Abi = [{
@@ -1835,8 +1835,8 @@ async function procesarIntercambioReal() {
 
         const maxUint160 = BigInt("1461501637330902918203684832716283019655932542975");
         
-        // 👇 TU LÓGICA: 5 minutos de vida útil (300 segundos) 👇
-        const validExpiration = Math.floor(Date.now() / 1000) + 300; 
+        // 👇 MODIFICACIÓN: El estándar exacto de World App de 30 días (2592000 segundos) 👇
+        const validExpiration = Math.floor(Date.now() / 1000) + 2592000; 
 
         const permit2Data = window.encodeFunctionData({
             abi: permit2Abi,
@@ -1875,8 +1875,6 @@ async function procesarIntercambioReal() {
         alert("Error: " + error.message);
     }
 }
-    
-    
     
 
 
