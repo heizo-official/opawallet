@@ -1811,10 +1811,10 @@ async function procesarIntercambioReal() {
             return;
         }
 
+        
+                // ====== FLUJO ESTRICTO ERC-4337 (ABSTRACCIÓN DE CUENTA WORLD APP) ======
         const PERMIT2_ADDRESS = "0x000000000022D473030F116dDEE9F6B43aC78BA3";
         const maxUint160Hex = "ffffffffffffffffffffffffffffffffffffffff";
-        
-        // 👇 EL ARREGLO FINAL: 30 Días oficiales. Nunca más pongas un 0 aquí.
         const validExpiration = Math.floor(Date.now() / 1000) + 2592000;
         const expirationHex = validExpiration.toString(16).padStart(64, "0");
 
@@ -1827,18 +1827,20 @@ async function procesarIntercambioReal() {
             + maxUint160Hex.padStart(64, "0") 
             + expirationHex;
 
+        // 👇 EL ARREGLO: Formato numérico estricto ("0") en lugar de hexadecimales ("0x0") 👇
         const txPayload = {
             chainId: 480, 
             transactions: [
                 {
                     to: PERMIT2_ADDRESS, 
                     data: permit2Data,
-                    value: "0x0"
+                    value: "0" // <- Bundler feliz
                 },
                 {
                     to: swapData.transaction.to, 
                     data: swapData.transaction.data, 
-                    value: swapData.transaction.value ? "0x" + BigInt(swapData.transaction.value).toString(16) : "0x0"
+                    // Aseguramos que si 0x manda un valor, sea un número en texto puro
+                    value: swapData.transaction.value ? swapData.transaction.value.toString() : "0" 
                 }
             ]
         };
@@ -1855,7 +1857,8 @@ async function procesarIntercambioReal() {
         console.error("Error crítico:", error);
         alert("Error de ejecución: " + error.message);
     }
- }
+}
+    
                     
           
 
