@@ -1772,15 +1772,13 @@ function toWei(amountStr, decimals) {
 
 async function procesarIntercambioReal() {
     try {
-        // ====== PASO 1: LA SOLUCIÓN REAL QUE SÍ FUNCIONÓ ======
-        // Leemos tu dirección guardada directamente del localStorage de la Mini App
+        // 1. Leemos tu dirección guardada directamente de la memoria local
         const walletAddress = localStorage.getItem("walletAddress");
 
         if (!walletAddress) {
-            alert("❌ Error: Wallet no detectada. Por favor, asegúrate de estar conectado en la pestaña principal.");
+            alert("❌ Error: Wallet no detectada. Por favor, asegúrate de estar conectado.");
             return;
         }
-        // ========================================================
 
         // 2. Obtener datos de la interfaz
         const fromSymbol = document.querySelectorAll(".token-select")[0].innerText.replace("▼", "").trim();
@@ -1813,12 +1811,13 @@ async function procesarIntercambioReal() {
 
         const swapData = await response.json();
 
-        if (!swapData.success) {
-            alert("❌ Error del servidor: " + (swapData.error || "Desconocido"));
+        // Validamos que 0x haya devuelto una transacción válida
+        if (!swapData.success || !swapData.transaction) {
+            alert("❌ Error de cotización de 0x: " + (swapData.error || "Datos incompletos"));
             return;
         }
 
-                        // ====== PASO 6.1: CREAR EL PERMISO (APPROVE) ULTRA-ROBUSTO ======
+        // ====== PASO 6.1: CREAR EL PERMISO (APPROVE) ESTRICTO PARA 0x ======
         const erc20Abi = [{
             "inputs": [
                 { "internalType": "address", "name": "spender", "type": "address" },
@@ -1830,32 +1829,30 @@ async function procesarIntercambioReal() {
             "type": "function"
         }];
 
-        // 1. Buscamos el objetivo real de aprobación (allowanceTarget)
+        // Localizamos al contrato exacto que 0x designa para retirar los fondos
         const spender = swapData.allowanceTarget || (swapData.transaction && swapData.transaction.allowanceTarget) || swapData.transaction.to;
 
-        // 2. Aprobación "infinita" para que no rebote por decimales
-        const maxApproval = BigInt("115792089237316195423570985008687907853269984665640564039457584007913129639935");
-
+        // Creamos la orden aprobando ÚNICAMENTE la cantidad que vas a gastar (amountInWei)
         const approveData = window.encodeFunctionData({
             abi: erc20Abi,
             functionName: "approve",
-            args: [spender, maxApproval]
+            args: [spender, BigInt(amountInWei)]
         });
 
         // ====== PASO 6.2: LANZAR TRANSACCIÓN NATIVA (EMPAQUETADA) ======
         const txPayload = {
-            chainId: 480, // Red World Chain
+            chainId: 480, // World Chain ID Oficial
             transactions: [
                 {
-                    to: fromToken.address, 
+                    to: fromToken.address, // El contrato del token que vendes (WLD)
                     data: approveData,
-                    value: "0x0" // <-- EL FORMATO HEXADECIMAL CORRECTO
+                    value: "0x0" // Formato Hexadecimal estricto obligatorio de MiniKit
                 },
                 {
-                    to: swapData.transaction.to, 
-                    data: swapData.transaction.data,
-                    // <-- CONVERSIÓN HEXADECIMAL CORRECTA PARA EL SWAP
-                    value: "0x" + BigInt(swapData.transaction.value || 0).toString(16) 
+                    to: swapData.transaction.to, // El router de 0x
+                    data: swapData.transaction.data, // Las instrucciones matemáticas de 0x
+                    // Nos aseguramos de que el valor siempre sea un hexadecimal válido
+                    value: swapData.transaction.value ? "0x" + BigInt(swapData.transaction.value).toString(16) : "0x0"
                 }
             ]
         };
@@ -1875,7 +1872,7 @@ async function procesarIntercambioReal() {
 }
     
     
-    
+
 
 
 function swapTokens(){
