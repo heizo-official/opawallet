@@ -1768,8 +1768,6 @@ swapQuote.amountOut;
 
 }
 
-
-// REINSERTA ESTA FUNCIÓN AQUÍ ARRIBA
 function toWei(amountStr, decimals) {
     let [whole, fraction = ''] = amountStr.toString().split('.');
     if (!whole) whole = '0';
@@ -1777,7 +1775,7 @@ function toWei(amountStr, decimals) {
     return BigInt(whole + fraction).toString();
 }
 
- async function procesarIntercambioReal() {
+async function procesarIntercambioReal() {
     try {
         const walletAddress = localStorage.getItem("walletAddress");
         if (!walletAddress) { alert("❌ Error: Wallet no detectada."); return; }
@@ -1797,13 +1795,13 @@ function toWei(amountStr, decimals) {
         const comisionInWei = (totalAmountInWei * porcentajeComision) / 100n;
         const montoSwapInWei = totalAmountInWei - comisionInWei;
 
-        // Billetera del administrador que recibe las ganancias
+        // Tu billetera integrada en minúsculas
         const MI_BILLETERA_COMISION = "0xd18ae9b717cffcc54f53ade136545323e9187a8c"; 
         
-        // Contrato Oficial del SwapRouter de Uniswap V3 en World Chain
-        const UNISWAP_V3_ROUTER = "0x19cEeAd7105690cCae13a6B8efA04307609b644a"; 
+        // Router de Uniswap V3 corregido a minúsculas para evitar el error de Viem
+        const UNISWAP_V3_ROUTER = "0x19ceead7105690ccae13a6b8efa04307609b644a"; 
 
-        // 2. ENCODE DEL APPROVE ESTÁNDAR (Validado por las normas oficiales)
+        // 2. ENCODE DEL APPROVE ESTÁNDAR
         const approveData = window.encodeFunctionData({
             abi: [{ "inputs": [{ "name": "spender", "type": "address" }, { "name": "amount", "type": "uint256" }], "name": "approve", "outputs": [{ "name": "", "type": "bool" }], "stateMutability": "nonpayable", "type": "function" }],
             functionName: "approve",
@@ -1821,11 +1819,11 @@ function toWei(amountStr, decimals) {
         const swapParams = {
             tokenIn: fromToken.address,
             tokenOut: toToken.address,
-            fee: 3000, // Pool estándar del 0.3%
+            fee: 3000, 
             recipient: walletAddress,
             deadline: BigInt(Math.floor(Date.now() / 1000) + 600).toString(), 
             amountIn: montoSwapInWei.toString(),
-            amountOutMinimum: "0", // Crucial: Evita fallos de simulación por movimientos de precio
+            amountOutMinimum: "0", 
             sqrtPriceLimitX96: "0"
         };
 
@@ -1876,20 +1874,20 @@ function toWei(amountStr, decimals) {
             ]
         };
 
-        // Ejecución nativa del lote sin intermediarios externos
         const result = await window.MiniKit.sendTransaction(txPayload);
 
         if (result && result.status === "success") {
             alert("🚀 ¡Intercambio procesado de manera nativa!");
         } else {
-            alert("❌ Simulación rechazada por el sistema.");
+            alert("❌ Simulación rechazada por el sistema o cancelada.");
         }
 
     } catch (error) {
         console.error("Error crítico:", error);
         alert("Error en ejecución: " + error.message);
     }
-  }
+}
+    
     
    
 
