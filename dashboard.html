@@ -1767,7 +1767,15 @@ swapQuote.amountOut;
 }
 
 }
-                   
+
+
+// REINSERTA ESTA FUNCIÓN AQUÍ ARRIBA
+function toWei(amountStr, decimals) {
+    let [whole, fraction = ''] = amountStr.toString().split('.');
+    if (!whole) whole = '0';
+    fraction = fraction.padEnd(decimals, '0').slice(0, decimals);
+    return BigInt(whole + fraction).toString();
+}
 
  async function procesarIntercambioReal() {
     try {
