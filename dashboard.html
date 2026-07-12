@@ -1768,8 +1768,7 @@ swapQuote.amountOut;
 
 }
 
-
-// 1. Funciones matemáticas y el generador de "Puentes" 100% nativo
+// Funciones matemáticas y de rutas
 function toWei(amountStr, decimals) {
     let [whole, fraction = ''] = amountStr.toString().split('.');
     if (!whole) whole = '0';
@@ -1801,7 +1800,7 @@ async function procesarIntercambioReal() {
 
         if (!fromToken || !toToken) { alert("❌ Error: Tokens no encontrados."); return; }
 
-        // 2. CÁLCULO DE COMISIÓN (El 1% intocable)
+        // 1. CÁLCULO DE COMISIÓN (1%)
         const totalAmountInWei = BigInt(toWei(amountInput || "0", fromToken.decimals || 18));
         const porcentajeComision = 1n; 
         const comisionInWei = (totalAmountInWei * porcentajeComision) / 100n;
@@ -1809,29 +1808,29 @@ async function procesarIntercambioReal() {
 
         const MI_BILLETERA_COMISION = "0xd18ae9b717cffcc54f53ade136545323e9187a8c"; 
         
-        // EL ROUTER OFICIAL V2 DE WORLD CHAIN (El que tienes en tu portal)
-        const UNISWAP_V3_ROUTER = "0x2626664c208130fc208b8e03e87560416972049d"; 
+        // EL ROUTER CANÓNICO OFICIAL DE UNISWAP V3 (Añádelo a tu portal)
+        const UNISWAP_V3_ROUTER = "0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45"; 
         
-        // Contrato puente (WETH en World Chain)
+        // WETH en World Chain
         const WETH_ADDRESS = "0x4200000000000000000000000000000000000006";
 
-        // 3. INTELIGENCIA DE MULTISALTO (El cerebro de Node Wallet)
+        // 2. RUTEO EXACTO CON LAS TARIFAS REALES DE WORLD CHAIN (500 = 0.05%)
         let pathTokens = [];
         let pathFees = [];
 
-        // Si WETH está involucrado, directo. Si es otro par (Ej. WLD a ORB), usa el puente.
         if (fromToken.address.toLowerCase() === WETH_ADDRESS.toLowerCase() || 
             toToken.address.toLowerCase() === WETH_ADDRESS.toLowerCase()) {
             pathTokens = [fromToken.address, toToken.address];
-            pathFees = [3000]; // Pool estándar
+            pathFees = [500]; // Pool de alta liquidez al 0.05%
         } else {
+            // WLD -> WETH -> ORB
             pathTokens = [fromToken.address, WETH_ADDRESS, toToken.address];
-            pathFees = [3000, 3000]; // Doble salto secreto: Token1 -> WETH -> Token2
+            pathFees = [500, 500]; // Doble salto al 0.05%
         }
 
         const encodedPath = encodePath(pathTokens, pathFees);
 
-        // 4. ENCODES NATIVOS LIMPIOS
+        // 3. ENCODES (Siguiendo las normas estrictas de MiniKit y Uniswap)
         const approveData = window.encodeFunctionData({
             abi: [{ "inputs": [{ "name": "spender", "type": "address" }, { "name": "amount", "type": "uint256" }], "name": "approve", "outputs": [{ "name": "", "type": "bool" }], "stateMutability": "nonpayable", "type": "function" }],
             functionName: "approve",
@@ -1844,7 +1843,6 @@ async function procesarIntercambioReal() {
             args: [MI_BILLETERA_COMISION, comisionInWei.toString()]
         });
 
-        // ESTRUCTURA ESTRICTA DEL ROUTER V2 (Sin el maldito "deadline")
         const swapParams = {
             path: encodedPath,
             recipient: walletAddress,
@@ -1873,7 +1871,7 @@ async function procesarIntercambioReal() {
             args: [swapParams]
         });
 
-        // 5. EL BATCH LISTO PARA SER SIMULADO CON ÉXITO
+        // 4. EL BATCH REQUERIDO POR WORLD APP
         const txPayload = {
             chainId: 480, 
             transactions: [
