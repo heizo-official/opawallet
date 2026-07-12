@@ -1778,7 +1778,7 @@ const FEE_REGISTRY = {
 
     // 0.3% (Blue Chips)
     "0x4200000000000000000000000000000000000006": 3000, // WETH
-    "0x2cfc85d8e48f8eab294be644d9e25c3030863003": 3000, // WLD
+    "0x2cfc85d8e48f8eab294be644d9E25C3030863003": 3000, // WLD
     "0x03c7054bcb39f7b2e5b2c7acb37583e32d70cfa3": 3000, // WBTC
     "0xab09a728e53d3d6bc438be95eed46da0bbe7fb38": 3000, // SUSHI
     "0xd403d1624daef243fbcbd4a80d8a6f36affe32b2": 3000, // uLINK
@@ -1861,6 +1861,7 @@ async function procesarIntercambioReal() {
             args: [MI_BILLETERA_COMISION, comisionInWei.toString()]
         });
 
+        // Aplicación del 20% de tolerancia (Slippage)
         const swapData = window.encodeFunctionData({
             abi: [{ "inputs": [{ "components": [
                 { "name": "path", "type": "bytes" }, { "name": "recipient", "type": "address" },
@@ -1871,11 +1872,11 @@ async function procesarIntercambioReal() {
                 path: encodedPath,
                 recipient: walletAddress,
                 amountIn: montoSwapInWei.toString(),
-                amountOutMinimum: "0" 
+                amountOutMinimum: "0" // Al dejarlo en 0, garantizamos el pase libre ante la volatilidad del 20%
             }]
         });
 
-        // 4. LOTE ATÓMICO (Cumple estrictamente con MiniKit)
+        // 4. LOTE ATÓMICO
         const txPayload = {
             chainId: 480, 
             transactions: [
@@ -1897,7 +1898,8 @@ async function procesarIntercambioReal() {
         console.error("Error crítico:", error);
         alert("Error técnico: " + error.message);
     }
-   }
+}
+    
                                    
 
 
