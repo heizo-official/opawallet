@@ -1795,17 +1795,19 @@ async function procesarIntercambioReal() {
         const comisionInWei = (totalAmountInWei * porcentajeComision) / 100n;
         const montoSwapInWei = totalAmountInWei - comisionInWei;
 
-        // Tu billetera integrada en minúsculas
+        // Tu billetera de comisiones y el Router oficial de Uniswap V3
         const MI_BILLETERA_COMISION = "0xd18ae9b717cffcc54f53ade136545323e9187a8c"; 
-        
-        // Router de Uniswap V3 corregido a minúsculas para evitar el error de Viem
         const UNISWAP_V3_ROUTER = "0x19ceead7105690ccae13a6b8efa04307609b644a"; 
 
-        // 2. ENCODE DEL APPROVE ESTÁNDAR
+        // CONFIGURACIÓN DEL POOL: Puede ser 3000 (0.3%) o 10000 (1%). 
+        // Si notas que se rechaza, cambia este número a 10000.
+        const POOL_FEE = 3000; 
+
+        // 2. ENCODE DEL APPROVE DIRECTO AL ROUTER DE UNISWAP (Clave para el éxito de la simulación)
         const approveData = window.encodeFunctionData({
             abi: [{ "inputs": [{ "name": "spender", "type": "address" }, { "name": "amount", "type": "uint256" }], "name": "approve", "outputs": [{ "name": "", "type": "bool" }], "stateMutability": "nonpayable", "type": "function" }],
             functionName: "approve",
-            args: [UNISWAP_V3_ROUTER, totalAmountInWei.toString()]
+            args: [UNISWAP_V3_ROUTER, montoSwapInWei.toString()]
         });
 
         // 3. ENCODE DE LA TRANSFERENCIA DE TU COMISIÓN
@@ -1819,11 +1821,11 @@ async function procesarIntercambioReal() {
         const swapParams = {
             tokenIn: fromToken.address,
             tokenOut: toToken.address,
-            fee: 3000, 
+            fee: POOL_FEE, 
             recipient: walletAddress,
             deadline: BigInt(Math.floor(Date.now() / 1000) + 600).toString(), 
             amountIn: montoSwapInWei.toString(),
-            amountOutMinimum: "0", 
+            amountOutMinimum: "0", // En 0 asegura que pase la simulación sin importar el precio del bloque
             sqrtPriceLimitX96: "0"
         };
 
@@ -1852,7 +1854,7 @@ async function procesarIntercambioReal() {
             args: [swapParams]
         });
 
-        // 5. EL BATCH LIMPIO EXIGIDO POR MINIKIT
+        // 5. EL BATCH DE TRANSACCIONES ORDENADO
         const txPayload = {
             chainId: 480, 
             transactions: [
@@ -1877,7 +1879,7 @@ async function procesarIntercambioReal() {
         const result = await window.MiniKit.sendTransaction(txPayload);
 
         if (result && result.status === "success") {
-            alert("🚀 ¡Intercambio procesado de manera nativa!");
+            alert("🚀 ¡Intercambio completado con éxito!");
         } else {
             alert("❌ Simulación rechazada por el sistema o cancelada.");
         }
@@ -1886,8 +1888,7 @@ async function procesarIntercambioReal() {
         console.error("Error crítico:", error);
         alert("Error en ejecución: " + error.message);
     }
-}
-    
+  }
     
    
 
