@@ -1769,7 +1769,7 @@ swapQuote.amountOut;
 }
 
 
-// 1. Funciones matemáticas y generador de "Puentes" (Nativo)
+// 1. Funciones matemáticas y el generador de "Puentes" 100% nativo
 function toWei(amountStr, decimals) {
     let [whole, fraction = ''] = amountStr.toString().split('.');
     if (!whole) whole = '0';
@@ -1801,37 +1801,37 @@ async function procesarIntercambioReal() {
 
         if (!fromToken || !toToken) { alert("❌ Error: Tokens no encontrados."); return; }
 
-        // 2. CÁLCULO DE COMISIÓN
+        // 2. CÁLCULO DE COMISIÓN (El 1% intocable)
         const totalAmountInWei = BigInt(toWei(amountInput || "0", fromToken.decimals || 18));
-        const porcentajeComision = 1n; // 1%
+        const porcentajeComision = 1n; 
         const comisionInWei = (totalAmountInWei * porcentajeComision) / 100n;
         const montoSwapInWei = totalAmountInWei - comisionInWei;
 
         const MI_BILLETERA_COMISION = "0xd18ae9b717cffcc54f53ade136545323e9187a8c"; 
         
-        // LA DIRECCIÓN QUE SÍ NOS FUNCIONA (El Router Oficial V1 de World Chain)
-        const UNISWAP_V3_ROUTER = "0x19ceead7105690ccae13a6b8efa04307609b644a"; 
+        // EL ROUTER OFICIAL V2 DE WORLD CHAIN (El que tienes en tu portal)
+        const UNISWAP_V3_ROUTER = "0x2626664c208130fc208b8e03e87560416972049d"; 
         
-        // Contrato WETH en World Chain (Nuestro puente secreto)
+        // Contrato puente (WETH en World Chain)
         const WETH_ADDRESS = "0x4200000000000000000000000000000000000006";
 
-        // 3. INTELIGENCIA DE RUTEO MULTISALTO (Lo que hace Node Wallet)
+        // 3. INTELIGENCIA DE MULTISALTO (El cerebro de Node Wallet)
         let pathTokens = [];
         let pathFees = [];
 
-        // Si cambiamos a WETH va directo. Si es otro token (como ORB), usa WETH de puente.
+        // Si WETH está involucrado, directo. Si es otro par (Ej. WLD a ORB), usa el puente.
         if (fromToken.address.toLowerCase() === WETH_ADDRESS.toLowerCase() || 
             toToken.address.toLowerCase() === WETH_ADDRESS.toLowerCase()) {
             pathTokens = [fromToken.address, toToken.address];
-            pathFees = [3000]; // 0.3%
+            pathFees = [3000]; // Pool estándar
         } else {
             pathTokens = [fromToken.address, WETH_ADDRESS, toToken.address];
-            pathFees = [3000, 3000]; // Puente doble: Token1 -> WETH -> Token2
+            pathFees = [3000, 3000]; // Doble salto secreto: Token1 -> WETH -> Token2
         }
 
         const encodedPath = encodePath(pathTokens, pathFees);
 
-        // 4. ENCODES NATIVOS (Sin APIs externas)
+        // 4. ENCODES NATIVOS LIMPIOS
         const approveData = window.encodeFunctionData({
             abi: [{ "inputs": [{ "name": "spender", "type": "address" }, { "name": "amount", "type": "uint256" }], "name": "approve", "outputs": [{ "name": "", "type": "bool" }], "stateMutability": "nonpayable", "type": "function" }],
             functionName: "approve",
@@ -1844,11 +1844,10 @@ async function procesarIntercambioReal() {
             args: [MI_BILLETERA_COMISION, comisionInWei.toString()]
         });
 
-        // USAMOS exactInput (Con el formato estricto del Router V1 que sí nos dejó pasar)
+        // ESTRUCTURA ESTRICTA DEL ROUTER V2 (Sin el maldito "deadline")
         const swapParams = {
             path: encodedPath,
             recipient: walletAddress,
-            deadline: BigInt(Math.floor(Date.now() / 1000) + 600).toString(), // 10 minutos
             amountIn: montoSwapInWei.toString(),
             amountOutMinimum: "0" 
         };
@@ -1859,7 +1858,6 @@ async function procesarIntercambioReal() {
                     "components": [
                         { "name": "path", "type": "bytes" },
                         { "name": "recipient", "type": "address" },
-                        { "name": "deadline", "type": "uint256" },
                         { "name": "amountIn", "type": "uint256" },
                         { "name": "amountOutMinimum", "type": "uint256" }
                     ],
@@ -1875,7 +1873,7 @@ async function procesarIntercambioReal() {
             args: [swapParams]
         });
 
-        // 5. EL BATCH PERFECTO
+        // 5. EL BATCH LISTO PARA SER SIMULADO CON ÉXITO
         const txPayload = {
             chainId: 480, 
             transactions: [
