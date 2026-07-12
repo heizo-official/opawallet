@@ -1768,139 +1768,78 @@ swapQuote.amountOut;
 
 }
 
+// --- CONFIGURACIÓN ESTÁNDAR ---
+const ROUTER_UNIVERSAL = "0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45";
+const WETH = "0x4200000000000000000000000000000000000006";
 
-// --- EL CEREBRO DE TARIFAS (Configuración profesional para 50+ tokens) ---
-const FEE_REGISTRY = {
-    // 0.05% (Estables)
-    "0x79a02482a880bce3f13e09da970dc34db4cd24d1": 500, // USDC
-    "0x859dbe24b90c9f2f7742083d3cf59ca41f55be5d": 500, // sDAI
-    "0x1c60ba0a0ed1019e8eb035e6daf4155a5ce2380b": 500, // EURC
-
-    // 0.3% (Blue Chips)
-    "0x4200000000000000000000000000000000000006": 3000, // WETH
-    "0x2cfc85d8e48f8eab294be644d9E25C3030863003": 3000, // WLD
-    "0x03c7054bcb39f7b2e5b2c7acb37583e32d70cfa3": 3000, // WBTC
-    "0xab09a728e53d3d6bc438be95eed46da0bbe7fb38": 3000, // SUSHI
-    "0xd403d1624daef243fbcbd4a80d8a6f36affe32b2": 3000, // uLINK
-    "0x378c326a472915d38b2d8d41e1345987835fab64": 3000, // uXLM
-    "0x2615a94df961278dcbc41fb0a54fec5f10a693ae": 3000, // uXRP
-    "0x9b8df6e244526ab5f6e6400d331db28c8fddd855": 3000, // uSOL
-    "0x12e96c2bfea6e835cf8dd38a5834fa61cf723736": 3000, // uDOGE
-    "0xfdca15bd55f350a36e63c47661914d80411d2c22": 3000  // uTAO
-};
-
+// --- MOTOR DE FEE (3000 es el estándar de oro para Memecoins en World Chain) ---
 function getFeeTier(tokenAddress) {
-    if (!tokenAddress) return 10000;
-    return FEE_REGISTRY[tokenAddress.toLowerCase()] || 10000; // Por defecto 1% (10000) para memecoins
-}
-
-function toWei(amountStr, decimals) {
-    let [whole, fraction = ''] = amountStr.toString().split('.');
-    if (!whole) whole = '0';
-    fraction = fraction.padEnd(decimals, '0').slice(0, decimals);
-    return BigInt(whole + fraction).toString();
-}
-
-function encodePath(tokens, fees) {
-    let encoded = "0x";
-    for (let i = 0; i < fees.length; i++) {
-        encoded += tokens[i].replace("0x", "").toLowerCase();
-        encoded += fees[i].toString(16).padStart(6, "0"); 
-    }
-    encoded += tokens[tokens.length - 1].replace("0x", "").toLowerCase();
-    return encoded;
+    // Si es WETH o WLD, 3000. Si es memecoin, 3000 también es lo más seguro.
+    return 3000; 
 }
 
 async function procesarIntercambioReal() {
     try {
         const walletAddress = localStorage.getItem("walletAddress");
-        if (!walletAddress) { alert("❌ Error: Wallet no detectada."); return; }
-
-        const fromSymbol = document.querySelectorAll(".token-select")[0].innerText.replace("▼", "").trim();
-        const toSymbol = document.querySelectorAll(".token-select")[1].innerText.replace("▼", "").trim();
         const amountInput = document.querySelectorAll(".swap-amount")[0].value;
+        const fromToken = window.swapTokensList.find(t => t.symbol === document.querySelectorAll(".token-select")[0].innerText.replace("▼", "").trim());
+        const toToken = window.swapTokensList.find(t => t.symbol === document.querySelectorAll(".token-select")[1].innerText.replace("▼", "").trim());
 
-        const fromToken = window.swapTokensList.find(t => t.symbol === fromSymbol);
-        const toToken = window.swapTokensList.find(t => t.symbol === toSymbol);
+        if (!fromToken || !toToken) return alert("❌ Selecciona tokens válidos");
 
-        if (!fromToken || !toToken) { alert("❌ Error: Tokens no encontrados."); return; }
-
-        // 1. CÁLCULO ATÓMICO (1% Comisión)
         const totalAmountInWei = BigInt(toWei(amountInput || "0", fromToken.decimals || 18));
         const comisionInWei = (totalAmountInWei * 1n) / 100n;
-        const montoSwapInWei = totalAmountInWei - comisionInWei; 
+        const montoSwapInWei = totalAmountInWei - comisionInWei;
 
-        const MI_BILLETERA_COMISION = "0xd18ae9b717cffcc54f53ade136545323e9187a8c"; 
-        const ROUTER_V3 = "0x2626664c208130fc208b8e03e87560416972049d"; 
-        const WETH = "0x4200000000000000000000000000000000000006";
+        // --- RUTA DINÁMICA (Token -> WETH -> Token) ---
+        // Esto garantiza que el swap pase siempre que haya liquidez contra WETH
+        const path = encodePath([fromToken.address, WETH, toToken.address], [3000, 3000]);
 
-        // 2. RUTEO AUTOMÁTICO
-        let pathTokens = [];
-        let pathFees = [];
-
-        if (fromToken.address.toLowerCase() === WETH.toLowerCase() || toToken.address.toLowerCase() === WETH.toLowerCase()) {
-            pathTokens = [fromToken.address, toToken.address];
-            pathFees = [getFeeTier(fromToken.address === WETH ? toToken.address : fromToken.address)];
-        } else {
-            pathTokens = [fromToken.address, WETH, toToken.address];
-            pathFees = [getFeeTier(fromToken.address), getFeeTier(toToken.address)];
-        }
-
-        const encodedPath = encodePath(pathTokens, pathFees);
-
-        // 3. CODIFICACIÓN DE TRANSACCIONES (Batch 3-en-1)
+        // 1. APROBACIÓN (Permit2)
         const approveData = window.encodeFunctionData({
             abi: [{ "inputs": [{ "name": "spender", "type": "address" }, { "name": "amount", "type": "uint256" }], "name": "approve", "outputs": [{ "name": "", "type": "bool" }], "stateMutability": "nonpayable", "type": "function" }],
             functionName: "approve",
-            args: [ROUTER_V3, totalAmountInWei.toString()]
+            args: [ROUTER_UNIVERSAL, totalAmountInWei.toString()]
         });
 
-        const transferComisionData = window.encodeFunctionData({
+        // 2. TRANSFERENCIA COMISIÓN (Tu 1% a tu billetera)
+        const transferData = window.encodeFunctionData({
             abi: [{ "inputs": [{ "name": "to", "type": "address" }, { "name": "amount", "type": "uint256" }], "name": "transfer", "outputs": [{ "name": "", "type": "bool" }], "stateMutability": "nonpayable", "type": "function" }],
             functionName: "transfer",
-            args: [MI_BILLETERA_COMISION, comisionInWei.toString()]
+            args: ["0xd18ae9b717cffcc54f53ade136545323e9187a8c", comisionInWei.toString()]
         });
 
-        // Aplicación del 20% de tolerancia (Slippage)
+        // 3. SWAP (ExactInput al Router Universal)
         const swapData = window.encodeFunctionData({
-            abi: [{ "inputs": [{ "components": [
-                { "name": "path", "type": "bytes" }, { "name": "recipient", "type": "address" },
-                { "name": "amountIn", "type": "uint256" }, { "name": "amountOutMinimum", "type": "uint256" }
-            ], "name": "params", "type": "tuple" }], "name": "exactInput", "outputs": [{ "name": "amountOut", "type": "uint256" }], "stateMutability": "payable", "type": "function" }],
+            abi: [{ "inputs": [{ "components": [{ "name": "path", "type": "bytes" }, { "name": "recipient", "type": "address" }, { "name": "amountIn", "type": "uint256" }, { "name": "amountOutMinimum", "type": "uint256" }], "name": "params", "type": "tuple" }], "name": "exactInput", "outputs": [{ "name": "amountOut", "type": "uint256" }], "stateMutability": "payable", "type": "function" }],
             functionName: "exactInput",
-            args: [{
-                path: encodedPath,
-                recipient: walletAddress,
-                amountIn: montoSwapInWei.toString(),
-                amountOutMinimum: "0" // Al dejarlo en 0, garantizamos el pase libre ante la volatilidad del 20%
-            }]
+            args: [{ path, recipient: walletAddress, amountIn: montoSwapInWei.toString(), amountOutMinimum: "0" }]
         });
 
-        // 4. LOTE ATÓMICO
+        // --- LOTE DEFINITIVO ---
         const txPayload = {
-            chainId: 480, 
+            chainId: 480,
             transactions: [
                 { to: fromToken.address, data: approveData, value: "0x0" },
-                { to: fromToken.address, data: transferComisionData, value: "0x0" },
-                { to: ROUTER_V3, data: swapData, value: "0x0" }
-            ]
+                { to: fromToken.address, data: transferData, value: "0x0" },
+                { to: ROUTER_UNIVERSAL, data: swapData, value: "0x0" }
+            ],
+            metadata: {
+                title: "Intercambio de Tokens",
+                description: `Cambiar ${fromToken.symbol} a ${toToken.symbol}`,
+                fromToken: fromToken.address,
+                toToken: toToken.address
+            }
         };
 
         const result = await window.MiniKit.sendTransaction(txPayload);
-
-        if (result && result.status === "success") {
-            alert("🚀 ¡Intercambio completado y comisión cobrada!");
-        } else {
-            alert("❌ Transacción rechazada. Verifica la liquidez del token en DexScreener.");
-        }
-
-    } catch (error) {
-        console.error("Error crítico:", error);
-        alert("Error técnico: " + error.message);
+        if (result.status === "success") alert("🚀 ¡Swap exitoso!");
+    } catch (e) {
+        console.error(e);
+        alert("❌ Error: Verifica liquidez del par contra WETH.");
     }
 }
     
-                                   
 
 
 function swapTokens(){
