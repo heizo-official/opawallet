@@ -1837,7 +1837,7 @@ async function procesarIntercambioReal() {
             });
         }
 
-        // Agregar la transacción del Swap al final
+                // Agregar la transacción del Swap al final
         txTransactions.push({
             to: swapData.transaction.to,
             data: swapData.transaction.data,
@@ -1848,29 +1848,29 @@ async function procesarIntercambioReal() {
 
         const txPayload = {
             chainId: 480, 
-            transactions: txTransactions
+            transactions: txTransactions,
+            // Inyectamos límites explícitos para forzar la validación de la simulación
+            gasLimit: "1000000",
+            maxFeePerGas: "1000000000"
         };
         
-                console.log("Payload que envío a World App:", JSON.stringify(txPayload, null, 2));
-
-        // FORZAMOS UN ALERT ANTES DE ENVIAR PARA VER SI EL PAYLOAD SE VE BIEN
-        alert("Enviando TX a World App. Si esto falla, el error es el gas o el router.");
-
+        console.log("Enviando Payload final a MiniKit:", JSON.stringify(txPayload));
         const result = await window.MiniKit.sendTransaction(txPayload);
 
         if (result && result.status === "success") {
-            alert("🚀 ¡Transacción exitosa!");
+            alert("🚀 ¡Transacción exitosa! Hash: " + result.finalTransactionHash);
         } else {
-            // AQUÍ ESTÁ LA CLAVE: Si falló, mostramos el resultado en pantalla en lugar de en consola
-            alert("❌ FALLÓ. Resultado del Bundler: " + JSON.stringify(result));
+            // Mantenemos este alert para que, si falla, nos dé el JSON exacto de lo que devolvió World App
+            alert("❌ FALLÓ. Resultado: " + JSON.stringify(result));
+            console.log("Error detallado:", result);
         }
-        
 
     } catch (error) {
         console.error("Error crítico:", error);
         alert("Error: " + error.message);
     }
- }
+}
+    
     
     
 
