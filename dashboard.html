@@ -1795,15 +1795,12 @@ async function procesarIntercambioReal() {
         const comisionInWei = (totalAmountInWei * porcentajeComision) / 100n;
         const montoSwapInWei = totalAmountInWei - comisionInWei;
 
-        // Tu billetera de comisiones y el Router oficial de Uniswap V3
         const MI_BILLETERA_COMISION = "0xd18ae9b717cffcc54f53ade136545323e9187a8c"; 
-        const UNISWAP_V3_ROUTER = "0x19ceead7105690ccae13a6b8efa04307609b644a"; 
+        
+        // ¡USAMOS EL ROUTER MODERNO QUE YA TIENES EN TU PORTAL!
+        const UNISWAP_V3_ROUTER = "0x2626664c208130fc208b8e03e87560416972049d"; 
 
-        // CONFIGURACIÓN DEL POOL: Puede ser 3000 (0.3%) o 10000 (1%). 
-        // Si notas que se rechaza, cambia este número a 10000.
-        const POOL_FEE = 3000; 
-
-        // 2. ENCODE DEL APPROVE DIRECTO AL ROUTER DE UNISWAP (Clave para el éxito de la simulación)
+        // 2. ENCODE DEL APPROVE DIRECTO AL ROUTER
         const approveData = window.encodeFunctionData({
             abi: [{ "inputs": [{ "name": "spender", "type": "address" }, { "name": "amount", "type": "uint256" }], "name": "approve", "outputs": [{ "name": "", "type": "bool" }], "stateMutability": "nonpayable", "type": "function" }],
             functionName: "approve",
@@ -1817,15 +1814,14 @@ async function procesarIntercambioReal() {
             args: [MI_BILLETERA_COMISION, comisionInWei.toString()]
         });
 
-        // 4. ENCODE DEL SWAP NATIVO (exactInputSingle)
+        // 4. EL GRAN ARREGLO: LA ESTRUCTURA CORRECTA (SIN "DEADLINE")
         const swapParams = {
             tokenIn: fromToken.address,
             tokenOut: toToken.address,
-            fee: POOL_FEE, 
+            fee: 3000, // IMPORTANTE: WLD a WETH usa 3000 (0.3%). Si por algún milagro falla, cámbialo a 500.
             recipient: walletAddress,
-            deadline: BigInt(Math.floor(Date.now() / 1000) + 600).toString(), 
             amountIn: montoSwapInWei.toString(),
-            amountOutMinimum: "0", // En 0 asegura que pase la simulación sin importar el precio del bloque
+            amountOutMinimum: "0", 
             sqrtPriceLimitX96: "0"
         };
 
@@ -1837,7 +1833,6 @@ async function procesarIntercambioReal() {
                         { "name": "tokenOut", "type": "address" },
                         { "name": "fee", "type": "uint24" },
                         { "name": "recipient", "type": "address" },
-                        { "name": "deadline", "type": "uint256" },
                         { "name": "amountIn", "type": "uint256" },
                         { "name": "amountOutMinimum", "type": "uint256" },
                         { "name": "sqrtPriceLimitX96", "type": "uint160" }
@@ -1854,7 +1849,7 @@ async function procesarIntercambioReal() {
             args: [swapParams]
         });
 
-        // 5. EL BATCH DE TRANSACCIONES ORDENADO
+        // 5. EL BATCH PERFECTO
         const txPayload = {
             chainId: 480, 
             transactions: [
@@ -1888,7 +1883,7 @@ async function procesarIntercambioReal() {
         console.error("Error crítico:", error);
         alert("Error en ejecución: " + error.message);
     }
-  }
+}
     
    
 
