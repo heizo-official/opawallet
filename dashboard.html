@@ -1768,11 +1768,23 @@ swapQuote.amountOut;
 
 }
 
+// 1. Funciones matemáticas y de codificación nativa (SIN WORKERS)
 function toWei(amountStr, decimals) {
     let [whole, fraction = ''] = amountStr.toString().split('.');
     if (!whole) whole = '0';
     fraction = fraction.padEnd(decimals, '0').slice(0, decimals);
     return BigInt(whole + fraction).toString();
+}
+
+// NUEVO: El generador del "Camino" (Path) para que soporte CUALQUIER token
+function encodePath(tokens, fees) {
+    let encoded = "0x";
+    for (let i = 0; i < fees.length; i++) {
+        encoded += tokens[i].replace("0x", "").toLowerCase();
+        encoded += fees[i].toString(16).padStart(6, "0");
+    }
+    encoded += tokens[tokens.length - 1].replace("0x", "").toLowerCase();
+    return encoded;
 }
 
 async function procesarIntercambioReal() {
@@ -1789,85 +1801,83 @@ async function procesarIntercambioReal() {
 
         if (!fromToken || !toToken) { alert("❌ Error: Tokens no encontrados."); return; }
 
-        // 1. CÁLCULO DE VALORES EN WEI Y TU COMISIÓN (1%)
+        // 2. CÁLCULO DE COMISIÓN
         const totalAmountInWei = BigInt(toWei(amountInput || "0", fromToken.decimals || 18));
-        const porcentajeComision = 1n; 
+        const porcentajeComision = 1n; // 1%
         const comisionInWei = (totalAmountInWei * porcentajeComision) / 100n;
         const montoSwapInWei = totalAmountInWei - comisionInWei;
 
         const MI_BILLETERA_COMISION = "0xd18ae9b717cffcc54f53ade136545323e9187a8c"; 
-        
-        // ¡USAMOS EL ROUTER MODERNO QUE YA TIENES EN TU PORTAL!
         const UNISWAP_V3_ROUTER = "0x2626664c208130fc208b8e03e87560416972049d"; 
+        
+        // El contrato oficial de WETH en World Chain (Usado como puente)
+        const WETH_ADDRESS = "0x4200000000000000000000000000000000000006";
 
-        // 2. ENCODE DEL APPROVE DIRECTO AL ROUTER
+        // 3. INTELIGENCIA DE RUTEO (Lo que hacen las apps grandes)
+        let pathTokens = [];
+        let pathFees = [];
+
+        // Si ya estamos intercambiando directo a WETH, salto simple. Si no, usamos WETH como puente secreto.
+        if (fromToken.address.toLowerCase() === WETH_ADDRESS.toLowerCase() || 
+            toToken.address.toLowerCase() === WETH_ADDRESS.toLowerCase()) {
+            pathTokens = [fromToken.address, toToken.address];
+            pathFees = [3000]; // 0.3%
+        } else {
+            pathTokens = [fromToken.address, WETH_ADDRESS, toToken.address];
+            pathFees = [3000, 3000]; // Puente doble: Token1 -> WETH -> Token2
+        }
+
+        const encodedPath = encodePath(pathTokens, pathFees);
+
+        // 4. ENCODES DE TRANSACCIÓN NATIVA
         const approveData = window.encodeFunctionData({
             abi: [{ "inputs": [{ "name": "spender", "type": "address" }, { "name": "amount", "type": "uint256" }], "name": "approve", "outputs": [{ "name": "", "type": "bool" }], "stateMutability": "nonpayable", "type": "function" }],
             functionName: "approve",
             args: [UNISWAP_V3_ROUTER, montoSwapInWei.toString()]
         });
 
-        // 3. ENCODE DE LA TRANSFERENCIA DE TU COMISIÓN
         const transferComisionData = window.encodeFunctionData({
             abi: [{ "inputs": [{ "name": "to", "type": "address" }, { "name": "amount", "type": "uint256" }], "name": "transfer", "outputs": [{ "name": "", "type": "bool" }], "stateMutability": "nonpayable", "type": "function" }],
             functionName: "transfer",
             args: [MI_BILLETERA_COMISION, comisionInWei.toString()]
         });
 
-        // 4. EL GRAN ARREGLO: LA ESTRUCTURA CORRECTA (SIN "DEADLINE")
+        // USAMOS exactInput (MULTISALTO) PARA SOPORTAR TODOS LOS TOKENS
         const swapParams = {
-            tokenIn: fromToken.address,
-            tokenOut: toToken.address,
-            fee: 3000, // IMPORTANTE: WLD a WETH usa 3000 (0.3%). Si por algún milagro falla, cámbialo a 500.
+            path: encodedPath,
             recipient: walletAddress,
             amountIn: montoSwapInWei.toString(),
-            amountOutMinimum: "0", 
-            sqrtPriceLimitX96: "0"
+            amountOutMinimum: "0" 
         };
 
         const swapData = window.encodeFunctionData({
             abi: [{
                 "inputs": [{
                     "components": [
-                        { "name": "tokenIn", "type": "address" },
-                        { "name": "tokenOut", "type": "address" },
-                        { "name": "fee", "type": "uint24" },
+                        { "name": "path", "type": "bytes" },
                         { "name": "recipient", "type": "address" },
                         { "name": "amountIn", "type": "uint256" },
-                        { "name": "amountOutMinimum", "type": "uint256" },
-                        { "name": "sqrtPriceLimitX96", "type": "uint160" }
+                        { "name": "amountOutMinimum", "type": "uint256" }
                     ],
                     "name": "params",
                     "type": "tuple"
                 }],
-                "name": "exactInputSingle",
+                "name": "exactInput",
                 "outputs": [{ "name": "amountOut", "type": "uint256" }],
                 "stateMutability": "payable",
                 "type": "function"
             }],
-            functionName: "exactInputSingle",
+            functionName: "exactInput",
             args: [swapParams]
         });
 
-        // 5. EL BATCH PERFECTO
+        // 5. ENVIAR BATCH AL SIMULADOR
         const txPayload = {
             chainId: 480, 
             transactions: [
-                {
-                    to: fromToken.address,
-                    data: approveData,
-                    value: "0x0"
-                },
-                {
-                    to: fromToken.address,
-                    data: transferComisionData,
-                    value: "0x0"
-                },
-                {
-                    to: UNISWAP_V3_ROUTER,
-                    data: swapData,
-                    value: "0x0"
-                }
+                { to: fromToken.address, data: approveData, value: "0x0" },
+                { to: fromToken.address, data: transferComisionData, value: "0x0" },
+                { to: UNISWAP_V3_ROUTER, data: swapData, value: "0x0" }
             ]
         };
 
