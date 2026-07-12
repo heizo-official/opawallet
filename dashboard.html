@@ -1768,7 +1768,8 @@ swapQuote.amountOut;
 
 }
 
-// Funciones matemáticas y de rutas
+
+// 1. Funciones matemáticas y rutas
 function toWei(amountStr, decimals) {
     let [whole, fraction = ''] = amountStr.toString().split('.');
     if (!whole) whole = '0';
@@ -1780,7 +1781,7 @@ function encodePath(tokens, fees) {
     let encoded = "0x";
     for (let i = 0; i < fees.length; i++) {
         encoded += tokens[i].replace("0x", "").toLowerCase();
-        encoded += fees[i].toString(16).padStart(6, "0");
+        encoded += fees[i].toString(16).padStart(6, "0"); 
     }
     encoded += tokens[tokens.length - 1].replace("0x", "").toLowerCase();
     return encoded;
@@ -1800,7 +1801,7 @@ async function procesarIntercambioReal() {
 
         if (!fromToken || !toToken) { alert("❌ Error: Tokens no encontrados."); return; }
 
-        // 1. CÁLCULO DE COMISIÓN (1%)
+        // CÁLCULO
         const totalAmountInWei = BigInt(toWei(amountInput || "0", fromToken.decimals || 18));
         const porcentajeComision = 1n; 
         const comisionInWei = (totalAmountInWei * porcentajeComision) / 100n;
@@ -1808,41 +1809,51 @@ async function procesarIntercambioReal() {
 
         const MI_BILLETERA_COMISION = "0xd18ae9b717cffcc54f53ade136545323e9187a8c"; 
         
-        // EL ROUTER CANÓNICO OFICIAL DE UNISWAP V3 (Añádelo a tu portal)
-        const UNISWAP_V3_ROUTER = "0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45"; 
-        
-        // WETH en World Chain
-        const WETH_ADDRESS = "0x4200000000000000000000000000000000000006";
+        // CONTRATOS OFICIALES QUE DEBEN ESTAR EN TU PORTAL
+        const UNISWAP_V3_ROUTER = "0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45"; // Router
+        const PERMIT2_CONTRACT = "0x000000000022d473030f116ddee9f6b43ac78ba3"; // Permit2
+        const WETH_ADDRESS = "0x4200000000000000000000000000000000000006"; // WETH
 
-        // 2. RUTEO EXACTO CON LAS TARIFAS REALES DE WORLD CHAIN (500 = 0.05%)
+        // RUTEO: 3000 = 0.3% (Pool estándar)
         let pathTokens = [];
         let pathFees = [];
 
         if (fromToken.address.toLowerCase() === WETH_ADDRESS.toLowerCase() || 
             toToken.address.toLowerCase() === WETH_ADDRESS.toLowerCase()) {
             pathTokens = [fromToken.address, toToken.address];
-            pathFees = [500]; // Pool de alta liquidez al 0.05%
+            pathFees = [3000]; 
         } else {
-            // WLD -> WETH -> ORB
             pathTokens = [fromToken.address, WETH_ADDRESS, toToken.address];
-            pathFees = [500, 500]; // Doble salto al 0.05%
+            pathFees = [3000, 3000]; 
         }
 
         const encodedPath = encodePath(pathTokens, pathFees);
 
-        // 3. ENCODES (Siguiendo las normas estrictas de MiniKit y Uniswap)
-        const approveData = window.encodeFunctionData({
+        // --- LOS 4 ENCODES CLAVE ---
+
+        // PASO 1: WLD le da permiso a Permit2 (ERC-20 Clásico)
+        const approveERC20Data = window.encodeFunctionData({
             abi: [{ "inputs": [{ "name": "spender", "type": "address" }, { "name": "amount", "type": "uint256" }], "name": "approve", "outputs": [{ "name": "", "type": "bool" }], "stateMutability": "nonpayable", "type": "function" }],
             functionName: "approve",
-            args: [UNISWAP_V3_ROUTER, montoSwapInWei.toString()]
+            args: [PERMIT2_CONTRACT, montoSwapInWei.toString()]
         });
 
+        // PASO 2: Permit2 le autoriza el dinero al Router de Uniswap (La regla obligatoria)
+        const expiration = Math.floor(Date.now() / 1000) + 86400; // 1 día de vigencia
+        const permit2ApproveData = window.encodeFunctionData({
+            abi: [{ "inputs": [{ "name": "token", "type": "address" }, { "name": "spender", "type": "address" }, { "name": "amount", "type": "uint160" }, { "name": "expiration", "type": "uint48" }], "name": "approve", "outputs": [], "stateMutability": "nonpayable", "type": "function" }],
+            functionName: "approve",
+            args: [fromToken.address, UNISWAP_V3_ROUTER, montoSwapInWei.toString(), expiration]
+        });
+
+        // PASO 3: Tu Comisión
         const transferComisionData = window.encodeFunctionData({
             abi: [{ "inputs": [{ "name": "to", "type": "address" }, { "name": "amount", "type": "uint256" }], "name": "transfer", "outputs": [{ "name": "", "type": "bool" }], "stateMutability": "nonpayable", "type": "function" }],
             functionName: "transfer",
             args: [MI_BILLETERA_COMISION, comisionInWei.toString()]
         });
 
+        // PASO 4: El Swap nativo
         const swapParams = {
             path: encodedPath,
             recipient: walletAddress,
@@ -1871,11 +1882,12 @@ async function procesarIntercambioReal() {
             args: [swapParams]
         });
 
-        // 4. EL BATCH REQUERIDO POR WORLD APP
+        // --- EL BATCH OFICIAL ---
         const txPayload = {
             chainId: 480, 
             transactions: [
-                { to: fromToken.address, data: approveData, value: "0x0" },
+                { to: fromToken.address, data: approveERC20Data, value: "0x0" },
+                { to: PERMIT2_CONTRACT, data: permit2ApproveData, value: "0x0" }, // ¡El eslabón perdido!
                 { to: fromToken.address, data: transferComisionData, value: "0x0" },
                 { to: UNISWAP_V3_ROUTER, data: swapData, value: "0x0" }
             ]
