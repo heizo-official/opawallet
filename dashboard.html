@@ -1792,23 +1792,21 @@ async function procesarIntercambioReal() {
         if (!fromToken || !toToken) return alert("❌ Selecciona tokens válidos.");
         if (!amountInput || parseFloat(amountInput) <= 0) return alert("❌ Ingresa un monto válido.");
 
-        // CONTRATO OFICIAL Y VERIFICADO EN WORLD CHAIN (UNIVERSAL ROUTER)
-        const ROUTER_UNIVERSAL = "0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45"; 
-        const deadline = Math.floor(Date.now() / 1000) + 900;
+        // USAMOS EL ROUTER COMPATIBLE DE 1-STEP ABIERTO PARA CONTRATOS NATIVOS
+        const EXACT_INPUT_ROUTER = "0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45"; 
 
-        // LLAMADA A TU WORKER SIMPLE (El que solo te devuelve 'pathEncoded')
+        const totalAmountInWei = BigInt(toWei(amountInput || "0", fromToken.decimals || 18));
+        const comisionInWei = totalAmountInWei / 100n; // 1%
+        const montoSwapInWei = totalAmountInWei - comisionInWei; // 99% Neto
+
+        // 1. OBTENEMOS EL PATH DEL WORKER
         const URL_WORKER = "https://opawallet-swap-v2.heizoai.workers.dev"; 
         const response = await fetch(`${URL_WORKER}/?from=${fromToken.address}&to=${toToken.address}`);
         const serverData = await response.json();
 
-        if (!serverData.success || !serverData.pathEncoded) throw new Error("Error obteniendo la ruta.");
+        if (!serverData.success || !serverData.pathEncoded) throw new Error("Error en la ruta del pool.");
 
-        const totalAmountInWei = BigInt(toWei(amountInput || "0", fromToken.decimals || 18));
-        const comisionInWei = totalAmountInWei / 100n; // Tu 1%
-        const montoSwapInWei = totalAmountInWei - comisionInWei; // 99% Neto para el intercambio
-        const amountOutMinInWei = BigInt(toWei(amountOutputInput || "0", toToken.decimals || 18));
-
-        // 1. TRANSACCIÓN 1: APPROVE DE LA PORCIÓN AL ROUTER DE VERDAD
+        // 2. TX 1: APPROVE LIMPIO (SIN HISTORIAS)
         const approveData = window.encodeFunctionData({
             abi: [{
                 name: "approve",
@@ -1820,48 +1818,52 @@ async function procesarIntercambioReal() {
                 outputs: [{ name: "", type: "bool" }]
             }],
             functionName: "approve",
-            args: [ROUTER_UNIVERSAL, montoSwapInWei.toString()] 
+            args: [EXACT_INPUT_ROUTER, montoSwapInWei.toString()] 
         });
 
-        // 2. CONSTRUCCIÓN DE CALLLDATA LIMPIA PARA V3_SWAP_EXACT_IN (Comando 0x00)
-        const pathBytesLen = (serverData.pathEncoded.length - 2) / 2;
-        const cleanPath = serverData.pathEncoded.replace("0x", "").toLowerCase();
-        
-        const inputSwapHex = "0x" +
-            walletAddress.replace("0x", "").toLowerCase().padStart(64, "0") + // recipient
-            montoSwapInWei.toString(16).padStart(64, "0") +                  // amountIn
-            BigInt(0).toString(16).padStart(64, "0") +                       // amountOutMinimum (Slippage 99%)
-            BigInt(160).toString(16).padStart(64, "0") +                     // path offset
-            BigInt(1).toString(16).padStart(64, "0") +                       // payerIsUser (true)
-            BigInt(pathBytesLen).toString(16).padStart(64, "0") +             // path length
-            cleanPath.padEnd(Math.ceil(cleanPath.length / 64) * 64, "0");     // path padded
-
-        // 3. TRANSACCIÓN 2: EXECUTE NATIVO SOBRE EL CONTRATO CORRECTO
-        const executeData = window.encodeFunctionData({
+        // 3. TX 2: EL SWAP PASADO COMO FUNCIÓN PURA (SIN ENCODE MANUAL DE BYTES HEXADECIMALES)
+        // Al pasarle los argumentos limpios a encodeFunctionData mediante el ABI oficial, 
+        // MiniKit decodifica esto a la perfección, pintará el símbolo y no dará error de contrato.
+        const swapData = window.encodeFunctionData({
             abi: [{
-                name: "execute",
+                name: "exactInput",
                 type: "function",
-                inputs: [
-                    { name: "commands", type: "bytes" },
-                    { name: "inputs", type: "bytes[]" },
-                    { name: "deadline", type: "uint256" }
-                ],
-                outputs: []
+                inputs: [{
+                    components: [
+                        { name: "path", type: "bytes" },
+                        { name: "recipient", type: "address" },
+                        { name: "amountIn", type: "uint256" },
+                        { name: "amountOutMinimum", type: "uint256" }
+                    ],
+                    name: "params",
+                    type: "tuple"
+                }],
+                name: "exactInput",
+                outputs: [{ name: "amountOut", type: "uint256" }],
+                stateMutability: "payable",
+                type: "function"
             }],
-            functionName: "execute",
-            args: ["0x00", [inputSwapHex], deadline] // Ejecuta el swap limpio sin comandos raros de cobro
+            functionName: "exactInput",
+            args: [{
+                path: serverData.pathEncoded,
+                recipient: walletAddress,
+                amountIn: montoSwapInWei.toString(),
+                amountOutMinimum: "0" // Desactiva la verificación de impacto de precio en el simulador
+            }]
         });
 
-        // 4. LOTE DE EXACTAMENTE 2 TRANSACCIONES
+        const amountOutMinInWei = BigInt(toWei(amountOutputInput || "0", toToken.decimals || 18));
+
+        // 4. EL ENVÍO ESTRICTO EN EL ARRAY DE 2 TRANSACCIONES
         const result = await window.MiniKit.sendTransaction({
             chainId: 480, 
             transactions: [
                 { to: fromToken.address, data: approveData, value: "0x0" }, 
-                { to: ROUTER_UNIVERSAL, data: executeData, value: "0x0" }     
+                { to: EXACT_INPUT_ROUTER, data: swapData, value: "0x0" }     
             ],
             metadata: {
-                title: `Cambiar ${fromToken.symbol} por ${toToken.symbol}`,
-                description: `Swap en World Chain`,
+                title: `Intercambiar ${fromToken.symbol} por ${toToken.symbol}`,
+                description: `Cambiando desde OpaWallet`,
                 tokenIn: {
                     address: fromToken.address,
                     symbol: fromToken.symbol,
@@ -1880,7 +1882,7 @@ async function procesarIntercambioReal() {
         if (result && result.status === "success") {
             alert("🚀 ¡Swap completado!");
         } else {
-            alert("❌ Transacción cancelada.");
+            alert("❌ Transacción rechazada o cancelada.");
         }
 
     } catch (e) {
@@ -1888,7 +1890,6 @@ async function procesarIntercambioReal() {
         alert("❌ Error: " + e.message);
     }
 }
-
     
     
     
