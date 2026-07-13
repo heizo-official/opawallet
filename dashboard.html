@@ -1768,8 +1768,8 @@ swapQuote.amountOut;
 
 }
     
-    // 1. Función global de conversión segura BigInt
-function toWei(amountStr, decimals) {
+    
+    function toWei(amountStr, decimals) {
     let [whole, fraction = ''] = amountStr.toString().split('.');
     if (!whole) whole = '0';
     fraction = fraction.padEnd(decimals, '0').slice(0, decimals);
@@ -1792,17 +1792,16 @@ async function procesarIntercambioReal() {
         if (!amountInput || parseFloat(amountInput) <= 0) return alert("❌ Ingresa un monto válido.");
 
         const ROUTER_UNIVERSAL = "0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45";
-        const deadline = Math.floor(Date.now() / 1000) + 900; // 15 minutos exactos
+        const deadline = Math.floor(Date.now() / 1000) + 900; 
 
-        // 2. LLAMADA AL BACKEND
+        // LLAMADA AL WORKER V2
         const URL_WORKER = "https://opawallet-swap-v2.heizoai.workers.dev"; 
         const response = await fetch(`${URL_WORKER}/?from=${fromToken.address}&to=${toToken.address}&amount=${amountInput}&decimals=${fromToken.decimals}&user=${walletAddress}`);
         const serverData = await response.json();
 
-        if (!serverData.success) throw new Error("Error en la respuesta del Worker: " + serverData.error);
+        if (!serverData.success) throw new Error("Error en el servidor: " + serverData.error);
 
-        // 3. TRANSACCIÓN 1: APPROVE TOTAL DEL TOKEN AL ROUTER UNIVERSAL
-        // Necesario obligatoriamente para que el contrato de Uniswap tenga derecho de mover los fondos.
+        // 1. TRANSACCIÓN 1: APPROVE TOTAL DEL TOKEN AL ROUTER UNIVERSAL
         const approveData = window.encodeFunctionData({
             abi: [{
                 name: "approve",
@@ -1817,7 +1816,7 @@ async function procesarIntercambioReal() {
             args: [ROUTER_UNIVERSAL, serverData.totalAmount] 
         });
 
-        // 4. TRANSACCIÓN 2: FUNCIÓN EXECUTE CON PARÁMETROS LIMPIOS EN HEXADECIMAL
+        // 2. TRANSACCIÓN 2: FUNCIÓN EXECUTE CON LOS COMANDOS EN CADENA CORREGIDOS
         const swapData = window.encodeFunctionData({
             abi: [{
                 name: "execute",
@@ -1833,24 +1832,24 @@ async function procesarIntercambioReal() {
             args: [serverData.commands, serverData.inputs, deadline]
         });
 
-        // 5. ENVÍO DEL LOTE DE EXACTAMENTE 2 TRANSACCIONES (ESTÁNDAR ABIERTO WORLD APP)
+        // 3. ENVÍO DEL LOTE DE EXACTAMENTE 2 TRANSACCIONES
         const result = await window.MiniKit.sendTransaction({
             chainId: 480, 
             transactions: [
-                { to: fromToken.address, data: approveData, value: "0x0" }, // 1. Dar permiso al router
-                { to: ROUTER_UNIVERSAL, data: swapData, value: "0x0" }     // 2. Ejecutar Comisión + Swap
+                { to: fromToken.address, data: approveData, value: "0x0" }, 
+                { to: ROUTER_UNIVERSAL, data: swapData, value: "0x0" }     
             ],
             metadata: {
                 tokenIn: { address: fromToken.address, symbol: fromToken.symbol, decimals: fromToken.decimals },
                 tokenOut: { address: toToken.address, symbol: toToken.symbol, decimals: toToken.decimals },
                 amountIn: serverData.totalAmount,
                 title: "Swap Seguro Uniswap V3",
-                description: "Intercambio directo y cobro de tarifa integrado"
+                description: "Intercambio directo con comisión integrada"
             }
         });
 
         if (result && result.status === "success") {
-            alert("🚀 ¡Swap exitoso! Tu comisión fue cobrada de manera nativa.");
+            alert("🚀 ¡Swap completado con éxito!");
         } else {
             alert("❌ Transacción rechazada en la simulación.");
         }
