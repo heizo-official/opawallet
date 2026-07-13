@@ -1776,7 +1776,12 @@ swapQuote.amountOut;
     return BigInt(whole + fraction).toString();
 }
 
-// 1. FUNCIÓN MAESTRA DE INTERCAMBIO (COMPATIBLE CON UNISWAP V4 EN WORLD CHAIN)
+// Helper para formatear bloques de 32 bytes requeridos por la EVM
+function pad32Bytes(str) {
+    return str.replace("0x", "").toLowerCase().padStart(64, "0");
+}
+
+// 1. FUNCIÓN MAESTRA NATIVA UNISWAP V4 (SIN BLOQUEOS DE FETCH)
 async function procesarIntercambioCompleto() {
     try {
         const walletAddress = localStorage.getItem("walletAddress");
@@ -1791,16 +1796,18 @@ async function procesarIntercambioCompleto() {
 
         if (!fromToken || !toToken || !amountInput) return alert("❌ Datos inválidos.");
 
-        // CONTRATOS OFICIALES DE UNISWAP V4 EN WORLD CHAIN
+        // CONTRATOS CLAVE EN WORLD CHAIN (VISTOS EN EL HASH DE DROPWALLET)
         const PERMIT2_ADDRESS = "0x000000000022D473030F116dDEE9F6B43aC78BA3".toLowerCase();
         const UNIVERSAL_ROUTER_V4 = "0x38869bf66a61cF6bDB996A6aE40D5853Fd43B526".toLowerCase();
         const WALLET_COMISION = "0xD18Ae9B717CfFcc54F53Ade136545323e9187a8C".toLowerCase();
 
         const totalAmountInWei = BigInt(toWei(amountInput, fromToken.decimals));
+        const comisionInWei = totalAmountInWei / 100n; // Tu 1%
+        const montoSwapInWei = totalAmountInWei - comisionInWei; // El 99% para el pool
 
-        alert("🔍 Preparando transacción nativa en World Chain...");
+        alert("🔍 Compilando ruta nativa en Uniswap V4...");
 
-        // TX 1: Aprobación estándar al contrato maestro Permit2 (Requisito de la World App)
+        // TX 1: Aprobación estándar al contrato maestro Permit2
         const approvePermit2Data = window.encodeFunctionData({
             abi: [{
                 name: "approve",
@@ -1816,42 +1823,54 @@ async function procesarIntercambioCompleto() {
         });
 
         // =========================================================================
-        // PASO B: OBTENER DATA DEL ENRUTADOR OFICIAL DE UNISWAP (SWAP + COMISIÓN)
+        // COMPILACIÓN DE COMANDOS PARA EL UNIVERSAL ROUTER V4
         // =========================================================================
-        // Para evitar compilar a mano los bytes de Uniswap V4 (que cambian por cada meme coin),
-        // consultamos el enrutador oficial de Uniswap Labs para la red 480.
         
-        const routingResponse = await fetch(`https://api.uniswap.org/v2/smart-order-router`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                chainId: 480,
-                type: "exactIn",
-                amount: totalAmountInWei.toString(),
-                tokenInAddress: fromToken.address,
-                tokenOutAddress: toToken.address,
-                slippageTolerance: "99.0", // 👈 Modificado a 99% (Máxima tolerancia para barrer liquidez)
-                recipient: walletAddress,
-                // Configuramos tu 1% de comisión integrado directamente en el contrato de Uniswap
-                feeOptions: {
-                    feePercent: "1.0",
-                    feeRecipient: WALLET_COMISION
-                }
-            })
+        // Acción 1: PERMIT2_TRANSFER_FROM (0x06) -> Envía el 100% de los tokens al Router V4
+        const inputPermit = "0x" + 
+            pad32Bytes(fromToken.address) + 
+            pad32Bytes(UNIVERSAL_ROUTER_V4) + 
+            pad32Bytes(totalAmountInWei.toString(16));
+
+        // Acción 2: V4_SWAP (0x10) -> Ejecuta la acción del pool en Uniswap V4
+        // Estructura de la ruta V4 (Path): TokenIn + Action + TokenOut. Usamos comisión estándar de pool común.
+        const pathHexV4 = fromToken.address.replace("0x", "").toLowerCase() + "00" + toToken.address.replace("0x", "").toLowerCase();
+        
+        const inputSwap = "0x" +
+            pad32Bytes(walletAddress) +                         // Destinatario (El usuario)
+            pad32Bytes(montoSwapInWei.toString(16)) +           // Cantidad para el Swap (99%)
+            pad32Bytes("0") +                                   // AMOUNT OUT MINIMUM EN 0 (Slippage Tolerancia 99%+)
+            pad32Bytes("160") +                                 // Offset de memoria del Path
+            pad32Bytes("1") +                                   // Retirar desde balances internos de Permit2
+            pad32Bytes((pathHexV4.length / 2).toString(16)) +   // Tamaño de la ruta
+            pathHexV4.padEnd(64, "0");
+
+        // Acción 3: TRANSFER (0x04) -> Envía el 1% de comisión restante del Router a tu wallet
+        const inputComision = "0x" +
+            pad32Bytes(fromToken.address) +
+            pad32Bytes(WALLET_COMISION) +
+            pad32Bytes(comisionInWei.toString(16));
+
+        // Empaquetado final de la función execute para V4
+        const executeRouterData = window.encodeFunctionData({
+            abi: [{
+                name: "execute",
+                type: "function",
+                inputs: [
+                    { name: "commands", type: "bytes" },
+                    { name: "inputs", type: "bytes[]" }
+                ]
+            }],
+            functionName: "execute",
+            args: [
+                "0x061004", // Cadena atómica V4: Extraer fondos -> V4 Swap -> Enviar Comisión
+                [inputPermit, inputSwap, inputComision]
+            ]
         });
 
-        const routeData = await routingResponse.json();
-        
-        if (!routeData || !routeData.methodParameters) {
-            throw new Error("No se pudo estructurar el Swap. Verifica si el par existe en Uniswap V4.");
-        }
-
-        const executeRouterData = routeData.methodParameters.calldata;
-        const estimadoTokensOut = routeData.quote;
-
-        // ==========================================
-        // PASO C: ENVIAR EL BATCH ATÓMICO A MINIKIT
-        // ==========================================
+        // =========================================================================
+        // ENVÍO DIRECTO SIN INTERMEDIARIOS DE RED
+        // =========================================================================
         const result = await window.MiniKit.sendTransaction({
             chainId: 480,
             transactions: [
@@ -1871,20 +1890,20 @@ async function procesarIntercambioCompleto() {
                     address: toToken.address.toLowerCase(),
                     symbol: toToken.symbol.toUpperCase(),
                     decimals: toToken.decimals,
-                    amount: estimadoTokensOut.toString()
+                    amount: "0" // Al ser slippage del 99%, se inicializa libre para capturar la liquidez que dé el bloque
                 }
             }
         });
 
         if (result && result.status === "success") {
-            alert("🚀 ¡Intercambio completado exitosamente en Uniswap V4!");
+            alert("🚀 ¡Intercambio completado de manera local y atómica!");
         } else {
-            alert("❌ Transacción cancelada en el dispositivo.");
+            alert("❌ Transacción rechazada.");
         }
 
     } catch (e) {
         console.error(e);
-        alert("❌ Error: " + e.message);
+        alert("❌ Error Crítico: " + e.message);
     }
 }
     
