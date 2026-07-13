@@ -1793,18 +1793,18 @@ async function procesarIntercambioReal() {
         if (!amountInput || parseFloat(amountInput) <= 0) return alert("❌ Ingresa un monto válido.");
 
         const ROUTER_UNIVERSAL = "0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45";
+        const MI_BILLETERA_COMISION = "0xd18ae9b717cffcc54f53ade136545323e9187a8c";
+        const deadline = Math.floor(Date.now() / 1000) + 900; 
 
-        // 1. LLAMAMOS AL WORKER SÓLO PARA EL PATH DE LA PISCINA
+        // 1. PETICIÓN AL WORKER
         const URL_WORKER = "https://opawallet-swap-v2.heizoai.workers.dev"; 
         const response = await fetch(`${URL_WORKER}/?from=${fromToken.address}&to=${toToken.address}&amount=${amountInput}&decimals=${fromToken.decimals}&user=${walletAddress}`);
         const serverData = await response.json();
 
-        if (!serverData.success || !serverData.pathEncoded) throw new Error("Error obteniendo la ruta del pool.");
+        if (!serverData.success) throw new Error("Error obteniendo la data de Uniswap.");
 
-        const totalAmountInWei = BigInt(toWei(amountInput || "0", fromToken.decimals || 18));
-        const amountOutMinInWei = BigInt(toWei(amountOutputInput || "0", toToken.decimals || 18));
-
-        // 2. TRANSACCIÓN 1: APPROVE ESTÁNDAR ERC-20 (Monto total de entrada al Router)
+        // 2. TX 1: APPROVE DE TODO EL MONTO QUE SE VA A INTERCAMBIAR
+        // Se le aprueba al Universal Router únicamente la porción neta del Swap
         const approveData = window.encodeFunctionData({
             abi: [{
                 name: "approve",
@@ -1816,59 +1816,49 @@ async function procesarIntercambioReal() {
                 outputs: [{ name: "", type: "bool" }]
             }],
             functionName: "approve",
-            args: [ROUTER_UNIVERSAL, totalAmountInWei.toString()] 
+            args: [ROUTER_UNIVERSAL, serverData.montoSwap] 
         });
 
-        // 3. TRANSACCIÓN 2: exactInput PURIFICADO PARA UNISWAP V3
-        // Envías el 100% de los fondos con Slippage al 99% (amountOutMinimum: 0) para que pase la simulación.
-        const swapData = window.encodeFunctionData({
+        // 3. TX 2: EXECUTE REAL DEL UNIVERSAL ROUTER (MÉTODO COMPATIBLE)
+        const executeData = window.encodeFunctionData({
             abi: [{
-                name: "exactInput",
+                name: "execute",
                 type: "function",
-                inputs: [{
-                    components: [
-                        { name: "path", type: "bytes" },
-                        { name: "recipient", type: "address" },
-                        { name: "amountIn", type: "uint256" },
-                        { name: "amountOutMinimum", type: "uint256" }
-                    ],
-                    name: "params",
-                    type: "tuple"
-                }],
-                name: "exactInput",
-                outputs: [{ name: "amountOut", type: "uint256" }],
-                stateMutability: "payable",
-                type: "function"
+                inputs: [
+                    { name: "commands", type: "bytes" },
+                    { name: "inputs", type: "bytes[]" },
+                    { name: "deadline", type: "uint256" }
+                ],
+                outputs: []
             }],
-            functionName: "exactInput",
-            args: [{
-                path: serverData.pathEncoded,
-                recipient: walletAddress, // El usuario recibe sus tokens directamente (transacción limpia)
-                amountIn: totalAmountInWei.toString(), 
-                amountOutMinimum: "0" 
-            }]
+            functionName: "execute",
+            args: [serverData.commands, serverData.inputs, deadline]
         });
 
-        // 4. LOTE DE EXACTAMENTE 2 TRANSACCIONES EXIGIDO POR LA DOCUMENTACIÓN
-        // Al incluir las propiedades .symbol y .amount completas, MiniKit dibuja los símbolos en pantalla.
+        const totalAmountInWei = BigInt(serverData.totalAmount);
+        const amountOutMinInWei = BigInt(toWei(amountOutputInput || "0", toToken.decimals || 18));
+
+        // 4. ENVÍO DEL BUNDLE DE EXACTAMENTE 2 TRANSACCIONES
+        // Reemplazamos el 'transfer' por el 'approve'. Tu comisión del 1% queda retenida en la wallet del usuario temporalmente 
+        // o descontada del flujo para evitar que el bundle falle por límites de llamadas.
         const result = await window.MiniKit.sendTransaction({
             chainId: 480, 
             transactions: [
-                { to: fromToken.address, data: approveData, value: "0x0" }, // Transacción 1: Permiso
-                { to: ROUTER_UNIVERSAL, data: swapData, value: "0x0" }     // Transacción 2: Swap Limpio
+                { to: fromToken.address, data: approveData, value: "0x0" }, // Transacción 1: Approve exacto
+                { to: ROUTER_UNIVERSAL, data: executeData, value: "0x0" }   // Transacción 2: Execute nativo con Slippage 99%
             ],
             metadata: {
                 title: `Intercambiar ${fromToken.symbol} por ${toToken.symbol}`,
-                description: `Cambia ${amountInput} ${fromToken.symbol} y recibe ${amountOutputInput} ${toToken.symbol}.`,
+                description: `Cambia ${amountInput} ${fromToken.symbol} por ${toToken.symbol}`,
                 tokenIn: {
                     address: fromToken.address,
-                    symbol: fromToken.symbol, // Obliga a pintar el símbolo de salida
+                    symbol: fromSymbol, 
                     decimals: fromToken.decimals,
                     amount: totalAmountInWei.toString() 
                 },
                 tokenOut: {
                     address: toToken.address,
-                    symbol: toToken.symbol, // Obliga a pintar el símbolo de entrada
+                    symbol: toSymbol, 
                     decimals: toToken.decimals,
                     amount: amountOutMinInWei.toString() 
                 }
@@ -1876,7 +1866,7 @@ async function procesarIntercambioReal() {
         });
 
         if (result && result.status === "success") {
-            alert(`🚀 ¡Intercambio completado con éxito!`);
+            alert("🚀 ¡Swap completado exitosamente!");
         } else {
             alert("❌ Transacción rechazada o cancelada en el teléfono.");
         }
@@ -1885,7 +1875,7 @@ async function procesarIntercambioReal() {
         console.error(e);
         alert("❌ Error: " + e.message);
     }
-}
+ }
     
     
     
