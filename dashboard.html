@@ -1791,31 +1791,29 @@ async function procesarIntercambioReal() {
 
         if (!fromToken || !toToken || !amountInput) return alert("❌ Datos inválidos.");
 
-        // CONTRATO ROUTER EMISOR (El que lee MiniKit para desglosar la UI)
+        // CONTRATO SWAPROUTER02 OFICIAL EN WORLD CHAIN
         const SWAP_ROUTER_V3 = "0x1a0cf719473587572240b4c6e94f1ff66cbdf166";
-        const MI_BILLETERA_COMISION = "0xd18ae9b717cffcc54f53ade136545323e9187a8c"; 
 
         const totalAmountInWei = BigInt(toWei(amountInput, fromToken.decimals));
-        const comisionInWei = totalAmountInWei / 100n; // Tu 1%
-        const montoSwapInWei = totalAmountInWei - comisionInWei; // 99% Neto para el Swap
         const estimatedOutInWei = BigInt(toWei(amountOutputInput, toToken.decimals));
 
-        // 1. DATA DE TRANSFERENCIA DE COMISIÓN (Alineada para que MiniKit pinte "Enviar")
-        const transferComisionData = window.encodeFunctionData({
+        // PASO 1: APPROVE (Darle permiso al Router de Uniswap para mover los tokens)
+        // Sin esto, la segunda transacción jamás se va a ejecutar y se cancelará siempre
+        const approveData = window.encodeFunctionData({
             abi: [{
-                name: "transfer",
+                name: "approve",
                 type: "function",
                 inputs: [
-                    { name: "to", type: "address" },
+                    { name: "spender", type: "address" },
                     { name: "amount", type: "uint256" }
                 ],
                 outputs: [{ name: "", type: "bool" }]
             }],
-            functionName: "transfer",
-            args: [MI_BILLETERA_COMISION, comisionInWei.toString()]
+            functionName: "approve",
+            args: [SWAP_ROUTER_V3, totalAmountInWei.toString()] 
         });
 
-        // 2. DATA DEL SWAP EN FORMATO DE VARIABLE PURA COMPATIBLE
+        // PASO 2: SWAP DIRECTO DEL 100% (Evitamos el transfer que rompe el lote)
         const swapData = window.encodeFunctionData({
             abi: [{
                 name: "exactInputSingle",
@@ -1842,27 +1840,25 @@ async function procesarIntercambioReal() {
             args: [{
                 tokenIn: fromToken.address,
                 tokenOut: toToken.address,
-                fee: 10000, 
-                recipient: walletAddress,
+                fee: 10000, // Pool del 1%
+                recipient: walletAddress, // Los tokens van directo al usuario de forma segura
                 deadline: Math.floor(Date.now() / 1000) + 900,
-                amountIn: montoSwapInWei.toString(),
-                amountOutMinimum: "0", // Slippage al 99% obligatorio para tokens de baja liquidez
+                amountIn: totalAmountInWei.toString(),
+                amountOutMinimum: "0", // Slippage al 99% para asegurar que pase la simulación
                 sqrtPriceLimitX96: "0"
             }]
         });
 
-        // 3. LA LLAMADA DE METADATOS QUE OBLIGA A LA WORLD APP A DIBUJAR "ENVIAR" Y "RECIBIR"
-        // Node Wallet logra esto estructurando estrictamente el metadata.tokenIn y metadata.tokenOut
-        // pasándolos como objetos de transferencia reconocidos por el Paymaster de la World App.
+        // ENVÍO DEL LOTE LEGAL DE 2 PASOS (APPROVE + SWAP)
         const result = await window.MiniKit.sendTransaction({
             chainId: 480, 
             transactions: [
-                { to: fromToken.address, data: transferComisionData, value: "0x0" }, 
-                { to: SWAP_ROUTER_V3, data: swapData, value: "0x0" }     
+                { to: fromToken.address, data: approveData, value: "0x0" }, // 1. Dar permiso
+                { to: SWAP_ROUTER_V3, data: swapData, value: "0x0" }        // 2. Ejecutar Swap
             ],
             metadata: {
                 title: "Permitir transacción",
-                description: "Intercambio seguro",
+                description: "Intercambio seguro de tokens",
                 tokenIn: {
                     address: fromToken.address,
                     symbol: fromToken.symbol,
@@ -1879,7 +1875,7 @@ async function procesarIntercambioReal() {
         });
 
         if (result && result.status === "success") {
-            alert("🚀 ¡Intercambio exitoso!");
+            alert("🚀 ¡Swap ejecutado con éxito!");
         } else {
             alert("❌ Transacción rechazada o cancelada.");
         }
