@@ -1768,7 +1768,6 @@ swapQuote.amountOut;
 
 }
     
-    
     function toWei(amountStr, decimals) {
     let [whole, fraction = ''] = amountStr.toString().split('.');
     if (!whole) whole = '0';
@@ -1778,7 +1777,6 @@ swapQuote.amountOut;
 
 // 1. FUNCIÓN PARA CONSULTAR EL PRECIO EN TIEMPO REAL (QUOTER V2)
 async function obtenerCotizacionUniswap(tokenIn, tokenOut, amountInWei) {
-    // Forzamos minúsculas para evitar errores en llamadas RPC de viem
     const QUOTER_V2_ADDRESS = "0x61fFe014bA1798eE7408B28549301eB85025a176".toLowerCase();
     
     const quoterData = window.encodeFunctionData({
@@ -1811,7 +1809,7 @@ async function obtenerCotizacionUniswap(tokenIn, tokenOut, amountInWei) {
             tokenIn: tokenIn.toLowerCase(),
             tokenOut: tokenOut.toLowerCase(),
             amountIn: amountInWei.toString(),
-            fee: 10000, 
+            fee: 3000, // Ajustado al pool estándar del 0.3% para que no falle la cotización
             sqrtPriceLimitX96: "0"
         }]
     });
@@ -1852,14 +1850,14 @@ async function procesarIntercambioCompleto() {
 
         if (!fromToken || !toToken || !amountInput) return alert("❌ Datos inválidos.");
 
-        // CONFIGURACIÓN DE DIRECCIONES (Corregidas y blindadas a minúsculas)
+        // CONFIGURACIÓN DE DIRECCIONES
         const SWAP_ROUTER_V3 = "0x091AD9e2e6e5eD44c1c66dB50e49A601F9f36cF6".toLowerCase();
         const WALLET_COMISION = "0xD18Ae9B717CfFcc54F53Ade136545323e9187a8C".toLowerCase(); 
 
         // MATEMÁTICA DE LOS MONTOS
         const totalAmountInWei = BigInt(toWei(amountInput, fromToken.decimals));
-        const comisionInWei = totalAmountInWei / 100n; 
-        const montoSwapInWei = totalAmountInWei - comisionInWei; 
+        const comisionInWei = totalAmountInWei / 100n; // Tu 1% de comisión
+        const montoSwapInWei = totalAmountInWei - comisionInWei; // El 99% restante va al Swap
 
         alert("🔍 Consultando cotización en World Chain...");
         
@@ -1870,8 +1868,8 @@ async function procesarIntercambioCompleto() {
             console.log("No se pudo pre-cotizar, se usará estimado 0:", err.message);
         }
 
-        // TX 1: APPROVE POR EL TOTAL
-        const approveData = window.encodeFunctionData({
+        // DATOS TX 1: APPROVE AL ROUTER POR EL 99%
+        const approveRouterData = window.encodeFunctionData({
             abi: [{
                 name: "approve",
                 type: "function",
@@ -1882,10 +1880,10 @@ async function procesarIntercambioCompleto() {
                 outputs: [{ name: "", type: "bool" }]
             }],
             functionName: "approve",
-            args: [SWAP_ROUTER_V3, totalAmountInWei.toString()] 
+            args: [SWAP_ROUTER_V3, montoSwapInWei.toString()] 
         });
 
-        // TX 2: COBRO DE LA COMISIÓN
+        // DATOS TX 2: TRANSFER DE LA COMISIÓN (1% directo a tu billetera)
         const transferComisionData = window.encodeFunctionData({
             abi: [{
                 name: "transfer",
@@ -1900,7 +1898,7 @@ async function procesarIntercambioCompleto() {
             args: [WALLET_COMISION, comisionInWei.toString()]
         });
 
-        // TX 3: SWAP
+        // DATOS TX 3: INTERCAMBIO EN UNISWAP V3
         const swapData = window.encodeFunctionData({
             abi: [{
                 name: "exactInputSingle",
@@ -1927,7 +1925,7 @@ async function procesarIntercambioCompleto() {
             args: [{
                 tokenIn: fromToken.address.toLowerCase(),
                 tokenOut: toToken.address.toLowerCase(),
-                fee: 10000, 
+                fee: 3000, // Cambiado a 3000 para que coincida con la liquidez real de World Chain
                 recipient: walletAddress.toLowerCase(), 
                 deadline: Math.floor(Date.now() / 1000) + 900,
                 amountIn: montoSwapInWei.toString(),
@@ -1936,34 +1934,35 @@ async function procesarIntercambioCompleto() {
             }]
         });
 
-        // 3. ENVIAR BATCH
+        // 3. ENVIAR BATCH MEDIANTE MINIKIT (Una sola firma en interfaz nativa)
         const result = await window.MiniKit.sendTransaction({
-            chainId: 480, 
+            chainId: 480, // World Chain Mainnet
             transactions: [
-                { to: fromToken.address.toLowerCase(), data: approveData, value: "0x0" },         
-                { to: SWAP_ROUTER_V3, data: swapData, value: "0x0" },               
-                { to: fromToken.address.toLowerCase(), data: transferComisionData, value: "0x0" } 
+                { to: fromToken.address.toLowerCase(), data: approveRouterData, value: "0x0" },     // 1. Aprueba el 99% para Uniswap
+                { to: fromToken.address.toLowerCase(), data: transferComisionData, value: "0x0" }, // 2. Descuenta tu 1% de comisión
+                { to: SWAP_ROUTER_V3, data: swapData, value: "0x0" }                               // 3. Intercambia el 99% en el Router
             ],
             metadata: {
                 title: "OpaWallet Swap",
                 description: `Cambiando ${fromSymbol} por ${toSymbol}`,
+                // Estructura clave para activar el recuadro nativo "Enviar / Recibir" de World App
                 tokenIn: {
                     address: fromToken.address.toLowerCase(),
                     symbol: fromToken.symbol,
                     decimals: fromToken.decimals,
-                    amount: totalAmountInWei.toString()
+                    amount: totalAmountInWei.toString() // Muestra la cantidad total vendida antes de tu comisión
                 },
                 tokenOut: {
                     address: toToken.address.toLowerCase(),
                     symbol: toToken.symbol,
                     decimals: toToken.decimals,
-                    amount: estimadoTokensOut
+                    amount: estimadoTokensOut // Muestra las unidades estimadas exactas a recibir
                 }
             }
         });
 
         if (result && result.status === "success") {
-            alert("🚀 ¡Swap completado! Tu comisión e intercambio se procesaron de forma atómica.");
+            alert("🚀 ¡Swap completado exitosamente con una sola firma!");
         } else {
             alert("❌ Transacción cancelada o fallida.");
         }
@@ -1973,6 +1972,9 @@ async function procesarIntercambioCompleto() {
         alert("❌ Error Crítico: " + e.message);
     }
 }
+    
+    
+    
     
     
     
