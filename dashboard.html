@@ -1769,7 +1769,14 @@ swapQuote.amountOut;
 }
     
     
-    // 1. FUNCIÓN MAESTRA DE INTERCAMBIO (CONEXIÓN DIRECTA A ODOS API)
+    function toWei(amountStr, decimals) {
+    let [whole, fraction = ''] = amountStr.toString().split('.');
+    if (!whole) whole = '0';
+    fraction = fraction.padEnd(decimals, '0').slice(0, decimals);
+    return BigInt(whole + fraction).toString();
+}
+
+// 1. FUNCIÓN MAESTRA DE INTERCAMBIO (COMPATIBLE CON UNISWAP V4 EN WORLD CHAIN)
 async function procesarIntercambioCompleto() {
     try {
         const walletAddress = localStorage.getItem("walletAddress");
@@ -1784,80 +1791,81 @@ async function procesarIntercambioCompleto() {
 
         if (!fromToken || !toToken || !amountInput) return alert("❌ Datos inválidos.");
 
-        alert("🔍 Buscando la mejor ruta en World Chain con ODOS...");
+        // CONTRATOS OFICIALES DE UNISWAP V4 EN WORLD CHAIN
+        const PERMIT2_ADDRESS = "0x000000000022D473030F116dDEE9F6B43aC78BA3".toLowerCase();
+        const UNIVERSAL_ROUTER_V4 = "0x38869bf66a61cF6bDB996A6aE40D5853Fd43B526".toLowerCase();
+        const WALLET_COMISION = "0xD18Ae9B717CfFcc54F53Ade136545323e9187a8C".toLowerCase();
 
-        // Tu wallet que recibirá el 1% de comisión
-        const WALLET_COMISION = "0xD18Ae9B717CfFcc54F53Ade136545323e9187a8C"; 
+        const totalAmountInWei = BigInt(toWei(amountInput, fromToken.decimals));
 
-        // PASO A: Convertir el monto de entrada a unidades correctas (pasando los decimales)
-        const amountInUnits = (Number(amountInput) * (10 ** fromToken.decimals)).toString().split('.')[0];
+        alert("🔍 Preparando transacción nativa en World Chain...");
 
-        // PASO B: Solicitar la cotización exacta (Quote) a ODOS
-        const quoteRequestBody = {
-            chainId: 480, // World Chain ID
-            inputTokens: [{ tokenAddress: fromToken.address.toLowerCase(), amount: amountInUnits }],
-            outputTokens: [{ tokenAddress: toToken.address.toLowerCase(), proportion: 1 }],
-            userAddr: walletAddress.toLowerCase(),
-            slippageLimitPercent: 3.0, // 3% de slippage para que soporte meme coins volátiles
-            referralCode: 0,
-            compact: true
-        };
+        // TX 1: Aprobación estándar al contrato maestro Permit2 (Requisito de la World App)
+        const approvePermit2Data = window.encodeFunctionData({
+            abi: [{
+                name: "approve",
+                type: "function",
+                inputs: [
+                    { name: "spender", type: "address" },
+                    { name: "amount", type: "uint256" }
+                ],
+                outputs: [{ name: "", type: "bool" }]
+            }],
+            functionName: "approve",
+            args: [PERMIT2_ADDRESS, totalAmountInWei.toString()]
+        });
 
-        const quoteResponse = await fetch("https://api.odos.xyz/sor/quote", {
+        // =========================================================================
+        // PASO B: OBTENER DATA DEL ENRUTADOR OFICIAL DE UNISWAP (SWAP + COMISIÓN)
+        // =========================================================================
+        // Para evitar compilar a mano los bytes de Uniswap V4 (que cambian por cada meme coin),
+        // consultamos el enrutador oficial de Uniswap Labs para la red 480.
+        
+        const routingResponse = await fetch(`https://api.uniswap.org/v2/smart-order-router`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(quoteRequestBody)
+            body: JSON.stringify({
+                chainId: 480,
+                type: "exactIn",
+                amount: totalAmountInWei.toString(),
+                tokenInAddress: fromToken.address,
+                tokenOutAddress: toToken.address,
+                slippageTolerance: "99.0", // 👈 Modificado a 99% (Máxima tolerancia para barrer liquidez)
+                recipient: walletAddress,
+                // Configuramos tu 1% de comisión integrado directamente en el contrato de Uniswap
+                feeOptions: {
+                    feePercent: "1.0",
+                    feeRecipient: WALLET_COMISION
+                }
+            })
         });
-        const quoteData = await quoteResponse.json();
 
-        if (!quoteData || !quoteData.pathId) {
-            throw new Error("No se encontró liquidez ni rutas de escape para este token.");
+        const routeData = await routingResponse.json();
+        
+        if (!routeData || !routeData.methodParameters) {
+            throw new Error("No se pudo estructurar el Swap. Verifica si el par existe en Uniswap V4.");
         }
 
-        // PASO C: Solicitar los bytes de la transacción (Assemble) metiendo tu comisión
-        const assembleRequestBody = {
-            userAddr: walletAddress.toLowerCase(),
-            pathId: quoteData.pathId,
-            // Aquí configuramos tu 1% de comisión al estilo DropWallet
-            feeFeePercent: 1.0, 
-            feeReceiver: WALLET_COMISION.toLowerCase()
-        };
+        const executeRouterData = routeData.methodParameters.calldata;
+        const estimadoTokensOut = routeData.quote;
 
-        const assembleResponse = await fetch("https://api.odos.xyz/sor/assemble", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(assembleRequestBody)
-        });
-        const assembleData = await assembleResponse.json();
-
-        if (!assembleData || !assembleData.transaction) {
-            throw new Error("Error al ensamblar la transacción inteligente.");
-        }
-
-        // Datos devueltos por el motor del agregador
-        const targetContract = assembleData.transaction.to;
-        const transactionData = assembleData.transaction.data;
-        const estimadoTokensOut = quoteData.outAmounts[0]; // Monto en Wei estimado a recibir
-
-        // PASO D: ENVIAR TRANSACCIÓN ÚNICA CON MINIKIT
-        // Al ir un solo bloque, World App pintará nativamente la interfaz "Enviar / Recibir"
+        // ==========================================
+        // PASO C: ENVIAR EL BATCH ATÓMICO A MINIKIT
+        // ==========================================
         const result = await window.MiniKit.sendTransaction({
             chainId: 480,
             transactions: [
-                {
-                    to: targetContract.toLowerCase(),
-                    data: transactionData,
-                    value: "0x0"
-                }
+                { to: fromToken.address.toLowerCase(), data: approvePermit2Data, value: "0x0" },
+                { to: UNIVERSAL_ROUTER_V4, data: executeRouterData, value: "0x0" }
             ],
             metadata: {
                 title: "OpaWallet Swap",
-                description: `Intercambio de ${fromSymbol} a ${toSymbol}`,
+                description: `Cambiando ${fromSymbol} por ${toSymbol}`,
                 tokenIn: {
                     address: fromToken.address.toLowerCase(),
                     symbol: fromToken.symbol.toUpperCase(),
                     decimals: fromToken.decimals,
-                    amount: amountInUnits
+                    amount: totalAmountInWei.toString()
                 },
                 tokenOut: {
                     address: toToken.address.toLowerCase(),
@@ -1869,16 +1877,16 @@ async function procesarIntercambioCompleto() {
         });
 
         if (result && result.status === "success") {
-            alert("🚀 ¡Swap completado exitosamente con el motor de ODOS!");
+            alert("🚀 ¡Intercambio completado exitosamente en Uniswap V4!");
         } else {
-            alert("❌ Transacción rechazada en la wallet.");
+            alert("❌ Transacción cancelada en el dispositivo.");
         }
 
     } catch (e) {
         console.error(e);
         alert("❌ Error: " + e.message);
     }
- }
+}
     
     
     
