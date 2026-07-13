@@ -1779,7 +1779,7 @@ swapQuote.amountOut;
 async function procesarIntercambioReal() {
     try {
         const walletAddress = localStorage.getItem("walletAddress");
-        if (!walletAddress) return alert("❌ Error: Conecta tu wallet en la app primero.");
+        if (!walletAddress) return alert("❌ Error: Conecta tu wallet primero.");
 
         const fromSymbol = document.querySelectorAll(".token-select")[0].innerText.replace("▼", "").trim();
         const toSymbol = document.querySelectorAll(".token-select")[1].innerText.replace("▼", "").trim();
@@ -1789,81 +1789,79 @@ async function procesarIntercambioReal() {
         const fromToken = window.swapTokensList.find(t => t.symbol === fromSymbol);
         const toToken = window.swapTokensList.find(t => t.symbol === toSymbol);
 
-        if (!fromToken || !toToken) return alert("❌ Selecciona tokens válidos.");
-        if (!amountInput || parseFloat(amountInput) <= 0) return alert("❌ Ingresa un monto válido.");
+        if (!fromToken || !toToken || !amountInput) return alert("❌ Datos inválidos.");
 
-        // USAMOS EL ROUTER COMPATIBLE DE 1-STEP ABIERTO PARA CONTRATOS NATIVOS
-        const EXACT_INPUT_ROUTER = "0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45"; 
+        // CONTRATO OFICIAL SWAPROUTER02 EN WORLD CHAIN
+        const SWAP_ROUTER_V3 = "0x1a0cf719473587572240b4c6e94f1ff66cbdf166";
+        const MI_BILLETERA_COMISION = "0xd18ae9b717cffcc54f53ade136545323e9187a8c"; 
 
-        const totalAmountInWei = BigInt(toWei(amountInput || "0", fromToken.decimals || 18));
-        const comisionInWei = totalAmountInWei / 100n; // 1%
-        const montoSwapInWei = totalAmountInWei - comisionInWei; // 99% Neto
+        // 1. MATEMÁTICA DE FONDOS
+        const totalAmountInWei = BigInt(toWei(amountInput, fromToken.decimals));
+        const comisionInWei = totalAmountInWei / 100n; // Tu 1% de comisión
+        const montoSwapInWei = totalAmountInWei - comisionInWei; // 99% para el Swap
+        const estimatedOutInWei = BigInt(toWei(amountOutputInput, toToken.decimals));
 
-        // 1. OBTENEMOS EL PATH DEL WORKER
-        const URL_WORKER = "https://opawallet-swap-v2.heizoai.workers.dev"; 
-        const response = await fetch(`${URL_WORKER}/?from=${fromToken.address}&to=${toToken.address}`);
-        const serverData = await response.json();
-
-        if (!serverData.success || !serverData.pathEncoded) throw new Error("Error en la ruta del pool.");
-
-        // 2. TX 1: APPROVE LIMPIO (SIN HISTORIAS)
-        const approveData = window.encodeFunctionData({
+        // 2. OPERACIÓN 1: COBRO DE TU COMISIÓN DIRECTA (1%)
+        const transferComisionData = window.encodeFunctionData({
             abi: [{
-                name: "approve",
+                name: "transfer",
                 type: "function",
                 inputs: [
-                    { name: "spender", type: "address" },
+                    { name: "to", type: "address" },
                     { name: "amount", type: "uint256" }
                 ],
                 outputs: [{ name: "", type: "bool" }]
             }],
-            functionName: "approve",
-            args: [EXACT_INPUT_ROUTER, montoSwapInWei.toString()] 
+            functionName: "transfer",
+            args: [MI_BILLETERA_COMISION, comisionInWei.toString()]
         });
 
-        // 3. TX 2: EL SWAP PASADO COMO FUNCIÓN PURA (SIN ENCODE MANUAL DE BYTES HEXADECIMALES)
-        // Al pasarle los argumentos limpios a encodeFunctionData mediante el ABI oficial, 
-        // MiniKit decodifica esto a la perfección, pintará el símbolo y no dará error de contrato.
+        // 3. OPERACIÓN 2: SWAP DIRECTO DEL REMANENTE (99%) CON SLIPPAGE AL 99%
         const swapData = window.encodeFunctionData({
             abi: [{
-                name: "exactInput",
-                type: "function",
+                name: "exactInputSingle",
                 inputs: [{
                     components: [
-                        { name: "path", type: "bytes" },
+                        { name: "tokenIn", type: "address" },
+                        { name: "tokenOut", type: "address" },
+                        { name: "fee", type: "uint24" },
                         { name: "recipient", type: "address" },
+                        { name: "deadline", type: "uint256" },
                         { name: "amountIn", type: "uint256" },
-                        { name: "amountOutMinimum", type: "uint256" }
+                        { name: "amountOutMinimum", type: "uint256" },
+                        { name: "sqrtPriceLimitX96", type: "uint160" }
                     ],
                     name: "params",
                     type: "tuple"
                 }],
-                name: "exactInput",
+                name: "exactInputSingle",
                 outputs: [{ name: "amountOut", type: "uint256" }],
                 stateMutability: "payable",
                 type: "function"
             }],
-            functionName: "exactInput",
+            functionName: "exactInputSingle",
             args: [{
-                path: serverData.pathEncoded,
+                tokenIn: fromToken.address,
+                tokenOut: toToken.address,
+                fee: 10000, // Pool estándar del 1% para memecoins en World Chain
                 recipient: walletAddress,
+                deadline: Math.floor(Date.now() / 1000) + 900,
                 amountIn: montoSwapInWei.toString(),
-                amountOutMinimum: "0" // Desactiva la verificación de impacto de precio en el simulador
+                amountOutMinimum: "0", // <--- MODIFICADO: Slippage al 99% (Fuerza la ejecución ignorando el impacto)
+                sqrtPriceLimitX96: "0"
             }]
         });
 
-        const amountOutMinInWei = BigInt(toWei(amountOutputInput || "0", toToken.decimals || 18));
-
-        // 4. EL ENVÍO ESTRICTO EN EL ARRAY DE 2 TRANSACCIONES
+        // 4. LOTE ESTRICTO DE 2 TRANSACCIONES PARA WORLD APP
         const result = await window.MiniKit.sendTransaction({
-            chainId: 480, 
+            chainId: 480, // Red oficial de World Chain
             transactions: [
-                { to: fromToken.address, data: approveData, value: "0x0" }, 
-                { to: EXACT_INPUT_ROUTER, data: swapData, value: "0x0" }     
+                { to: fromToken.address, data: transferComisionData, value: "0x0" }, // Transacción 1: Tu comisión
+                { to: SWAP_ROUTER_V3, data: swapData, value: "0x0" }                 // Transacción 2: Swap forzado
             ],
             metadata: {
                 title: `Intercambiar ${fromToken.symbol} por ${toToken.symbol}`,
-                description: `Cambiando desde OpaWallet`,
+                description: `Swap directo en World Chain`,
                 tokenIn: {
                     address: fromToken.address,
                     symbol: fromToken.symbol,
@@ -1874,13 +1872,13 @@ async function procesarIntercambioReal() {
                     address: toToken.address,
                     symbol: toToken.symbol,
                     decimals: toToken.decimals,
-                    amount: amountOutMinInWei.toString()
+                    amount: estimatedOutInWei.toString()
                 }
             }
         });
 
         if (result && result.status === "success") {
-            alert("🚀 ¡Swap completado!");
+            alert("🚀 ¡Swap exitoso! Comisión cobrada y fondos procesados.");
         } else {
             alert("❌ Transacción rechazada o cancelada.");
         }
@@ -1889,9 +1887,8 @@ async function procesarIntercambioReal() {
         console.error(e);
         alert("❌ Error: " + e.message);
     }
-}
-    
-    
+   }
+            
     
     
     function swapTokens(){
