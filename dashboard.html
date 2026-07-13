@@ -1767,43 +1767,8 @@ swapQuote.amountOut;
 }
 
 }
-
-  // --- DIRECCIONES DE CONTRATOS OFICIALES DE WORLD CHAIN ---
-const PERMIT2 = "0x000000000022D473030F116dDEE9F6B43aC78BA3"; 
-const ROUTER_UNIVERSAL = "0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45"; 
-const WETH = "0x4200000000000000000000000000000000000006";
-
-// Registro de Fees automático corregido
-const FEE_REGISTRY = {
-    "0x4200000000000000000000000000000000000006": 3000, // WETH
-    "0x2cfc85d8e48f8eab294be644d9e25c3030863003": 3000, // WLD
-    "0x79a02482a880bce3f13e09da970dc34db4cd24d1": 500    // USDC
-};
-
-function getFeeTier(tokenAddress) {
-    if (!tokenAddress) return 10000;
-    // Corregido: .toLowerCase() con paréntesis correcto en lugar de la 'O'
-    return FEE_REGISTRY[tokenAddress.toLowerCase()] || 10000; 
-}
-
-function toWei(amountStr, decimals) {
-    let [whole, fraction = ''] = amountStr.toString().split('.');
-    if (!whole) whole = '0';
-    fraction = fraction.padEnd(decimals, '0').slice(0, decimals);
-    return BigInt(whole + fraction).toString();
-}
-
-function encodePath(tokens, fees) {
-    let encoded = "0x";
-    for (let i = 0; i < fees.length; i++) {
-        encoded += tokens[i].replace("0x", "").toLowerCase();
-        encoded += fees[i].toString(16).padStart(6, "0"); 
-    }
-    encoded += tokens[tokens.length - 1].replace("0x", "").toLowerCase();
-    return encoded;
-}
-
-async function procesarIntercambioReal() {
+    
+    async function procesarIntercambioReal() {
     try {
         const walletAddress = localStorage.getItem("walletAddress");
         if (!walletAddress) return alert("❌ Error: Conecta tu wallet en la app primero.");
@@ -1816,30 +1781,22 @@ async function procesarIntercambioReal() {
         const toToken = window.swapTokensList.find(t => t.symbol === toSymbol);
 
         if (!fromToken || !toToken) return alert("❌ Selecciona tokens válidos.");
+        if (!amountInput || parseFloat(amountInput) <= 0) return alert("❌ Ingresa un monto válido.");
 
-        const totalAmountInWei = BigInt(toWei(amountInput || "0", fromToken.decimals || 18));
-        const comisionInWei = (totalAmountInWei * 1n) / 100n; 
-        const montoSwapInWei = totalAmountInWei - comisionInWei;
-
+        const ROUTER_UNIVERSAL = "0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45";
         const MI_BILLETERA_COMISION = "0xd18ae9b717cffcc54f53ade136545323e9187a8c";
 
-        let pathTokens = [];
-        let pathFees = [];
-        if (fromToken.address.toLowerCase() === WETH.toLowerCase() || toToken.address.toLowerCase() === WETH.toLowerCase()) {
-            pathTokens = [fromToken.address, toToken.address];
-            pathFees = [getFeeTier(fromToken.address.toLowerCase() === WETH.toLowerCase() ? toToken.address : fromToken.address)];
-        } else {
-            pathTokens = [fromToken.address, WETH, toToken.address];
-            pathFees = [getFeeTier(fromToken.address), getFeeTier(toToken.address)];
-        }
-        const pathEncoded = encodePath(pathTokens, pathFees);
+        const totalAmountInWei = BigInt(toWei(amountInput || "0", fromToken.decimals || 18));
+        const deadline = Math.floor(Date.now() / 1000) + 900; // 15 minutos exactos
 
-        const transferComisionData = window.encodeFunctionData({
-            abi: [{ "inputs": [{ "name": "to", "type": "address" }, { "name": "amount", "type": "uint256" }], "name": "transfer", "outputs": [{ "name": "", "type": "bool" }], "stateMutability": "nonpayable", "type": "function" }],
-            functionName: "transfer",
-            args: [MI_BILLETERA_COMISION, comisionInWei.toString()]
-        });
+        // 1. LLAMADA AL WORKER PARA OBTENER EL PATH DE UNISWAP
+        const URL_WORKER = "https://tu-worker.workers.dev"; 
+        const response = await fetch(`${URL_WORKER}/?from=${fromToken.address}&to=${toToken.address}&amount=${amountInput}&decimals=${fromToken.decimals}&user=${walletAddress}`);
+        const serverData = await response.json();
 
+        if (!serverData.success) throw new Error("Error obteniendo la ruta del pool.");
+
+        // 2. TRANSACCIÓN 1: APROBACIÓN TOTAL A PERMIT2
         const approvePermit2Data = window.encodeFunctionData({
             abi: [{
                 name: "approve",
@@ -1853,59 +1810,73 @@ async function procesarIntercambioReal() {
                 outputs: []
             }],
             functionName: "approve",
-            args: [fromToken.address, ROUTER_UNIVERSAL, totalAmountInWei.toString(), Math.floor(Date.now() / 1000) + 3600]
+            args: [fromToken.address, ROUTER_UNIVERSAL, totalAmountInWei.toString(), deadline] 
         });
 
+        // 3. TRANSACCIÓN 2: COMANDOS DEL UNIVERSAL ROUTER (SWAP V3 + TU COMISIÓN NATIVA)
+        // Usamos la función execute oficial. Enviamos el par de comandos en bytes:
+        // 0x06 es PAY_PORTION (saca tu 1%) y 0x00 es V3_SWAP_EXACT_IN (intercambia el resto)
         const swapData = window.encodeFunctionData({
-            abi: [{ "inputs": [{ "components": [{ "name": "path", "type": "bytes" }, { "name": "recipient", "type": "address" }, { "name": "amountIn", "type": "uint256" }, { "name": "amountOutMinimum", "type": "uint256" }], "name": "params", "type": "tuple" }], "name": "exactInput", "outputs": [{ "name": "amountOut", "type": "uint256" }], "stateMutability": "payable", "type": "function" }],
-            functionName: "exactInput",
-            args: [{
-                path: pathEncoded,
-                recipient: walletAddress,
-                amountIn: montoSwapInWei.toString(),
-                amountOutMinimum: "0"
-            }]
+            abi: [{
+                name: "execute",
+                type: "function",
+                inputs: [
+                    { name: "commands", type: "bytes" },
+                    { name: "inputs", type: "bytes[]" },
+                    { name: "deadline", type: "uint256" }
+                ],
+                outputs: []
+            }],
+            functionName: "execute",
+            args: [
+                "0x0600", // Primero extrae la comisión, luego hace el swap con el sobrante
+                [
+                    // Input Comando 1 (PAY_PORTION): Saca el 1% (100 puntos básicos) de los tokens de origen
+                    window.encodeFunctionData({
+                        abi: [{ inputs: [{ name: "token", type: "address" }, { name: "recipient", type: "address" }, { name: "bips", type: "uint256" }], type: "function" }],
+                        args: [fromToken.address, MI_BILLETERA_COMISION, "100"]
+                    }),
+                    // Input Comando 2 (V3_SWAP_EXACT_IN): Cambia el 99% restante por la memecoin
+                    // amountOutMinimum en "0" = Slippage de 99% para absorber impactos de precio salvajes
+                    window.encodeFunctionData({
+                        abi: [{ inputs: [{ name: "recipient", type: "address" }, { name: "amountIn", type: "uint256" }, { name: "amountOutMinimum", type: "uint256" }, { name: "path", type: "bytes" }, { name: "payerIsUser", type: "bool" }], type: "function" }],
+                        args: [walletAddress, (totalAmountInWei - (totalAmountInWei / 100n)).toString(), "0", serverData.pathEncoded, true]
+                    })
+                ],
+                deadline
+            ]
         });
 
-        // Payload enviado con estructura de metadata oficial de MiniKit
+        // 4. EL ENVIÓ DEL LOTE ATÓMICO EXIGIDO (Exactamente 2 transacciones)
         const result = await window.MiniKit.sendTransaction({
             chainId: 480, 
             transactions: [
-                { to: fromToken.address, data: transferComisionData, value: "0x0" },
-                { to: PERMIT2, data: approvePermit2Data, value: "0x0" }, 
-                { to: ROUTER_UNIVERSAL, data: swapData, value: "0x0" }
+                { to: fromToken.address, data: approvePermit2Data, value: "0x0" }, // 1. Permiso
+                { to: ROUTER_UNIVERSAL, data: swapData, value: "0x0" }             // 2. Comisión + Swap
             ],
             metadata: {
-                tokenIn: {
-                    address: fromToken.address,
-                    symbol: fromToken.symbol,
-                    decimals: fromToken.decimals
-                },
-                tokenOut: {
-                    address: toToken.address,
-                    symbol: toToken.symbol,
-                    decimals: toToken.decimals
-                },
+                tokenIn: { address: fromToken.address, symbol: fromToken.symbol, decimals: fromToken.decimals },
+                tokenOut: { address: toToken.address, symbol: toToken.symbol, decimals: toToken.decimals },
                 amountIn: totalAmountInWei.toString(),
-                title: "Swap de Tokens",
-                description: `Intercambiar ${fromToken.symbol} por ${toToken.symbol}`
+                title: "Swap Seguro Uniswap V3",
+                description: "Ejecución garantizada con Slippage 99%"
             }
         });
 
         if (result && result.status === "success") {
-            alert("🚀 ¡Swap exitoso!");
+            alert("🚀 ¡Swap exitoso! Comisión cobrada y transacción completada.");
         } else {
-            alert("❌ Transacción rechazada o simulación fallida.");
+            alert("❌ Transacción rechazada por el validador.");
         }
 
     } catch (e) {
         console.error(e);
-        alert("❌ Error en ejecución: " + e.message);
+        alert("❌ Error: " + e.message);
     }
-  }
-                                   
-
-
+    }
+    
+    
+    
     function swapTokens(){
     const tokenButtons = document.querySelectorAll(".token-select");
     if(tokenButtons.length < 2) return;
