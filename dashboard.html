@@ -1767,17 +1767,15 @@ swapQuote.amountOut;
 }
 
 }
-
-    // Agrega estas líneas exactas justo arriba de procesarIntercambioReal
-function toWei(amountStr, decimals) {
+    
+    function toWei(amountStr, decimals) {
     let [whole, fraction = ''] = amountStr.toString().split('.');
     if (!whole) whole = '0';
     fraction = fraction.padEnd(decimals, '0').slice(0, decimals);
     return BigInt(whole + fraction).toString();
 }
-    
-    
-    async function procesarIntercambioReal() {
+
+async function procesarIntercambioReal() {
     try {
         const walletAddress = localStorage.getItem("walletAddress");
         if (!walletAddress) return alert("❌ Error: Conecta tu wallet en la app primero.");
@@ -1793,19 +1791,16 @@ function toWei(amountStr, decimals) {
         if (!amountInput || parseFloat(amountInput) <= 0) return alert("❌ Ingresa un monto válido.");
 
         const ROUTER_UNIVERSAL = "0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45";
-        const MI_BILLETERA_COMISION = "0xd18ae9b717cffcc54f53ade136545323e9187a8c";
+        const deadline = Math.floor(Date.now() / 1000) + 900; 
 
-        const totalAmountInWei = BigInt(toWei(amountInput || "0", fromToken.decimals || 18));
-        const deadline = Math.floor(Date.now() / 1000) + 900; // 15 minutos exactos
-
-        // 1. LLAMADA AL WORKER PARA OBTENER EL PATH DE UNISWAP
+        // 🚨 ASEGÚRATE DE USAR TU NUEVA URL AQUÍ:
         const URL_WORKER = "https://opawallet-swap-v2.heizoai.workers.dev"; 
         const response = await fetch(`${URL_WORKER}/?from=${fromToken.address}&to=${toToken.address}&amount=${amountInput}&decimals=${fromToken.decimals}&user=${walletAddress}`);
         const serverData = await response.json();
 
-        if (!serverData.success) throw new Error("Error obteniendo la ruta del pool.");
+        if (!serverData.success) throw new Error("Error procesando la data de Uniswap.");
 
-        // 2. TRANSACCIÓN 1: APROBACIÓN TOTAL A PERMIT2
+        // 1. TRANSACCIÓN 1: APROBACIÓN SIMPLE A PERMIT2 (Por el total)
         const approvePermit2Data = window.encodeFunctionData({
             abi: [{
                 name: "approve",
@@ -1819,12 +1814,10 @@ function toWei(amountStr, decimals) {
                 outputs: []
             }],
             functionName: "approve",
-            args: [fromToken.address, ROUTER_UNIVERSAL, totalAmountInWei.toString(), deadline] 
+            args: [fromToken.address, ROUTER_UNIVERSAL, serverData.totalAmount, deadline] 
         });
 
-        // 3. TRANSACCIÓN 2: COMANDOS DEL UNIVERSAL ROUTER (SWAP V3 + TU COMISIÓN NATIVA)
-        // Usamos la función execute oficial. Enviamos el par de comandos en bytes:
-        // 0x06 es PAY_PORTION (saca tu 1%) y 0x00 es V3_SWAP_EXACT_IN (intercambia el resto)
+        // 2. TRANSACCIÓN 2: EJECUCIÓN MULTI-COMANDO CON DATA PURA DEL WORKER
         const swapData = window.encodeFunctionData({
             abi: [{
                 name: "execute",
@@ -1837,52 +1830,36 @@ function toWei(amountStr, decimals) {
                 outputs: []
             }],
             functionName: "execute",
-            args: [
-                "0x0600", // Primero extrae la comisión, luego hace el swap con el sobrante
-                [
-                    // Input Comando 1 (PAY_PORTION): Saca el 1% (100 puntos básicos) de los tokens de origen
-                    window.encodeFunctionData({
-                        abi: [{ inputs: [{ name: "token", type: "address" }, { name: "recipient", type: "address" }, { name: "bips", type: "uint256" }], type: "function" }],
-                        args: [fromToken.address, MI_BILLETERA_COMISION, "100"]
-                    }),
-                    // Input Comando 2 (V3_SWAP_EXACT_IN): Cambia el 99% restante por la memecoin
-                    // amountOutMinimum en "0" = Slippage de 99% para absorber impactos de precio salvajes
-                    window.encodeFunctionData({
-                        abi: [{ inputs: [{ name: "recipient", type: "address" }, { name: "amountIn", type: "uint256" }, { name: "amountOutMinimum", type: "uint256" }, { name: "path", type: "bytes" }, { name: "payerIsUser", type: "bool" }], type: "function" }],
-                        args: [walletAddress, (totalAmountInWei - (totalAmountInWei / 100n)).toString(), "0", serverData.pathEncoded, true]
-                    })
-                ],
-                deadline
-            ]
+            args: [serverData.commands, serverData.inputs, deadline]
         });
 
-        // 4. EL ENVIÓ DEL LOTE ATÓMICO EXIGIDO (Exactamente 2 transacciones)
+        // 3. ENVÍO DEL LOTE DE DOS PASOS COMPATIBLE CON WORLD APP
         const result = await window.MiniKit.sendTransaction({
             chainId: 480, 
             transactions: [
-                { to: fromToken.address, data: approvePermit2Data, value: "0x0" }, // 1. Permiso
-                { to: ROUTER_UNIVERSAL, data: swapData, value: "0x0" }             // 2. Comisión + Swap
+                { to: fromToken.address, data: approvePermit2Data, value: "0x0" }, 
+                { to: ROUTER_UNIVERSAL, data: swapData, value: "0x0" }             
             ],
             metadata: {
                 tokenIn: { address: fromToken.address, symbol: fromToken.symbol, decimals: fromToken.decimals },
                 tokenOut: { address: toToken.address, symbol: toToken.symbol, decimals: toToken.decimals },
-                amountIn: totalAmountInWei.toString(),
+                amountIn: serverData.totalAmount,
                 title: "Swap Seguro Uniswap V3",
-                description: "Ejecución garantizada con Slippage 99%"
+                description: "Ejecución directa en pool con Slippage al 99%"
             }
         });
 
         if (result && result.status === "success") {
-            alert("🚀 ¡Swap exitoso! Comisión cobrada y transacción completada.");
+            alert("🚀 ¡Swap completado y comisión enviada!");
         } else {
-            alert("❌ Transacción rechazada por el validador.");
+            alert("❌ Transacción rechazada en la simulación RPC.");
         }
 
     } catch (e) {
         console.error(e);
         alert("❌ Error: " + e.message);
     }
-    }
+}
     
     
     
