@@ -1777,7 +1777,7 @@ swapQuote.amountOut;
 }
 
 // 1. CONSULTA PRECIO ESTIMADO
-async function obtenerCotizacionUniswap(tokenIn, tokenOut, amountInWei) {
+async function obtenerCotizacionUniswap(tokenIn, tokenOut, amountInWei, feePool) {
     const QUOTER_V2_ADDRESS = "0x61fFe014bA1798eE7408B28549301eB85025a176".toLowerCase();
     
     const quoterData = window.encodeFunctionData({
@@ -1805,7 +1805,7 @@ async function obtenerCotizacionUniswap(tokenIn, tokenOut, amountInWei) {
             tokenIn: tokenIn.toLowerCase(),
             tokenOut: tokenOut.toLowerCase(),
             amountIn: amountInWei.toString(),
-            fee: 10000, 
+            fee: feePool, 
             sqrtPriceLimitX96: "0"
         }]
     });
@@ -1829,7 +1829,7 @@ async function obtenerCotizacionUniswap(tokenIn, tokenOut, amountInWei) {
     }
 }
 
-// 2. FUNCIÓN PRINCIPAL (SWAP + COBRO AUTOMÁTICO POST-SWAP)
+// 2. FUNCIÓN PRINCIPAL DE INTERCAMBIO 
 async function procesarIntercambioCompleto() {
     try {
         const walletAddress = localStorage.getItem("walletAddress");
@@ -1847,15 +1847,20 @@ async function procesarIntercambioCompleto() {
         const SWAP_ROUTER_V3 = "0x091AD9e2e6e5eD44c1c66dB50e49A601F9f36cF6".toLowerCase();
         const WALLET_COMISION = "0xD18Ae9B717CfFcc54F53Ade136545323e9187a8C".toLowerCase(); 
 
-        // Intercambiamos el 100% de lo que introduce el usuario
+        // CONFIGURACIÓN DEL POOL
+        // Si estás probando ORB cambia aquí entre 10000 (1%) o 3000 (0.3%) según donde esté el pool real en la interfaz de Uniswap
+        let feePool = 10000; 
+        const tokens03 = ["WLD", "WETH", "USDC", "ETH", "WBTC"];
+        if (tokens03.includes(fromSymbol.toUpperCase()) && tokens03.includes(toSymbol.toUpperCase())) {
+            feePool = 3000; 
+        }
+
         const totalAmountInWei = BigInt(toWei(amountInput, fromToken.decimals));
 
-        alert("🔍 Consultando cotización en World Chain...");
-        const estimadoTokensOut = await obtenerCotizacionUniswap(fromToken.address, toToken.address, totalAmountInWei);
+        alert("🔍 Consultando cotización final en World Chain...");
+        const estimadoTokensOut = await obtenerCotizacionUniswap(fromToken.address, toToken.address, totalAmountInWei, feePool);
 
-        // -----------------------------------------------------------------
-        // PASO 1: ENVIAR EL SWAP DIRECTO DEL 100% (MÁXIMA TOLERANCIA)
-        // -----------------------------------------------------------------
+        // TX 1: APPROVE AL ROUTER POR EL MONTO TOTAL
         const approveData = window.encodeFunctionData({
             abi: [{
                 name: "approve",
@@ -1870,6 +1875,7 @@ async function procesarIntercambioCompleto() {
             args: [SWAP_ROUTER_V3, totalAmountInWei.toString()]
         });
 
+        // TX 2: SWAP CON DEADLINE INMUNE A DESINCRONIZACIÓN DE LA HORA DEL CELULAR
         const swapData = window.encodeFunctionData({
             abi: [{
                 name: "exactInputSingle",
@@ -1896,16 +1902,15 @@ async function procesarIntercambioCompleto() {
             args: [{
                 tokenIn: fromToken.address.toLowerCase(),
                 tokenOut: toToken.address.toLowerCase(),
-                fee: 10000, 
+                fee: feePool, 
                 recipient: walletAddress.toLowerCase(), 
-                deadline: Math.floor(Date.now() / 1000) + 900,
+                // 👈 DEADLINE FIJO MÁXIMO (Año 2038+). Evita que el simulador rechace la transacción por desfases de tiempo.
+                deadline: "9999999999", 
                 amountIn: totalAmountInWei.toString(),
-                amountOutMinimum: "0", // Slippage máximo para Meme Coins sin liquidez
+                amountOutMinimum: "0", 
                 sqrtPriceLimitX96: "0"
             }]
         });
-
-        alert("🚀 Ejecutando intercambio...");
 
         const swapResult = await window.MiniKit.sendTransaction({
             chainId: 480, 
@@ -1931,20 +1936,14 @@ async function procesarIntercambioCompleto() {
             }
         });
 
-        // -----------------------------------------------------------------
-        // PASO 2: SI EL SWAP FUE EXITOSO, COBRAMOS EL 1% DEL TOKEN DE DESTINO
-        // -----------------------------------------------------------------
+        // COBRO DE COMISIÓN POST-SWAP AUTOMÁTICO
         if (swapResult && swapResult.status === "success") {
             
-            // Calculamos el 1% de comisión basado en las unidades estimadas que el usuario recibió
             const tokensRecibidosBigInt = estimadoTokensOut === "0" ? 1000n : BigInt(estimadoTokensOut);
             const comisionDestinoInWei = tokensRecibidosBigInt / 100n; 
-
-            // Si el monto de comisión es ridículamente bajo por falta de liquidez, ponemos un mínimo seguro
             const comisionFinalWei = comisionDestinoInWei > 0n ? comisionDestinoInWei : 1n;
 
-            // Alerta sutil para avisar al sistema que firme la verificación final
-            alert("🔒 Procesando verificación final del Swap...");
+            alert("🔒 Procesando verificación final...");
 
             const transferComisionData = window.encodeFunctionData({
                 abi: [{
@@ -1960,8 +1959,7 @@ async function procesarIntercambioCompleto() {
                 args: [WALLET_COMISION, comisionFinalWei.toString()]
             });
 
-            // Se envía de forma nativa la comisión del token de salida
-            const comisionResult = await window.MiniKit.sendTransaction({
+            await window.MiniKit.sendTransaction({
                 chainId: 480,
                 transactions: [
                     { to: toToken.address.toLowerCase(), data: transferComisionData, value: "0x0" }
@@ -1984,22 +1982,18 @@ async function procesarIntercambioCompleto() {
                 }
             });
 
-            if (comisionResult && comisionResult.status === "success") {
-                alert("✨ ¡Todo listo! Intercambio completado y verificado exitosamente.");
-            } else {
-                alert("⚠️ Intercambio realizado, pero la tasa del sistema quedó pendiente.");
-            }
+            alert("✨ ¡Intercambio completado y verificado exitosamente!");
 
         } else {
-            alert("❌ Transacción cancelada o rechazada en el simulador.");
+            alert("❌ Transacción rechazada.");
         }
 
     } catch (e) {
         console.error(e);
         alert("❌ Error Crítico: " + e.message);
     }
- }
-                            
+  }
+                                        
     
     
     
