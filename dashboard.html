@@ -1778,9 +1778,9 @@ swapQuote.amountOut;
 
 // 1. FUNCIÓN PARA CONSULTAR EL PRECIO EN TIEMPO REAL (QUOTER V2)
 async function obtenerCotizacionUniswap(tokenIn, tokenOut, amountInWei) {
-    const QUOTER_V2_ADDRESS = "0x61fFe014bA1798eE7408B28549301eB85025a176";
+    // Forzamos minúsculas para evitar errores en llamadas RPC de viem
+    const QUOTER_V2_ADDRESS = "0x61fFe014bA1798eE7408B28549301eB85025a176".toLowerCase();
     
-    // Codificar la función quoteExactInputSingle manualmente para no usar librerías
     const quoterData = window.encodeFunctionData({
         abi: [{
             name: "quoteExactInputSingle",
@@ -1808,15 +1808,14 @@ async function obtenerCotizacionUniswap(tokenIn, tokenOut, amountInWei) {
         }],
         functionName: "quoteExactInputSingle",
         args: [{
-            tokenIn: tokenIn,
-            tokenOut: tokenOut,
+            tokenIn: tokenIn.toLowerCase(),
+            tokenOut: tokenOut.toLowerCase(),
             amountIn: amountInWei.toString(),
-            fee: 10000, // Pool del 1%
+            fee: 10000, 
             sqrtPriceLimitX96: "0"
         }]
     });
 
-    // Llamada nativa fetch al nodo RPC de World Chain
     const response = await fetch('https://rpc.worldchain.org', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1831,7 +1830,6 @@ async function obtenerCotizacionUniswap(tokenIn, tokenOut, amountInWei) {
     const json = await response.json();
     if (json.error) throw new Error("Error en el Quoter: " + json.error.message);
     
-    // El RPC devuelve los datos en hex. Los primeros 64 bytes después del '0x' son el amountOut.
     const rawResult = json.result;
     if (!rawResult || rawResult === "0x") return "0";
     
@@ -1854,18 +1852,17 @@ async function procesarIntercambioCompleto() {
 
         if (!fromToken || !toToken || !amountInput) return alert("❌ Datos inválidos.");
 
-        // CONFIGURACIÓN DE DIRECCIONES
-        const SWAP_ROUTER_V3 = "0x091AD9e2e6e5eD44c1c66dB50e49A601F9f36cF6";
-        const WALLET_COMISION = "0xD18ae9b717CfFCc54F53AdE136545323E9187a8c"; // Checksum correcto
+        // CONFIGURACIÓN DE DIRECCIONES (Corregidas y blindadas a minúsculas)
+        const SWAP_ROUTER_V3 = "0x091AD9e2e6e5eD44c1c66dB50e49A601F9f36cF6".toLowerCase();
+        const WALLET_COMISION = "0xD18Ae9B717CfFcc54F53Ade136545323e9187a8C".toLowerCase(); 
 
         // MATEMÁTICA DE LOS MONTOS
         const totalAmountInWei = BigInt(toWei(amountInput, fromToken.decimals));
-        const comisionInWei = totalAmountInWei / 100n; // Tu 1%
-        const montoSwapInWei = totalAmountInWei - comisionInWei; // El 99% para Uniswap
+        const comisionInWei = totalAmountInWei / 100n; 
+        const montoSwapInWei = totalAmountInWei - comisionInWei; 
 
         alert("🔍 Consultando cotización en World Chain...");
         
-        // Consultar el precio estimado (Sirve para los metadatos de MiniKit)
         let estimadoTokensOut = "0";
         try {
             estimadoTokensOut = await obtenerCotizacionUniswap(fromToken.address, toToken.address, montoSwapInWei);
@@ -1888,7 +1885,7 @@ async function procesarIntercambioCompleto() {
             args: [SWAP_ROUTER_V3, totalAmountInWei.toString()] 
         });
 
-        // TX 2: COBRO DE LA COMISIÓN (Calculada sobre el token de origen)
+        // TX 2: COBRO DE LA COMISIÓN
         const transferComisionData = window.encodeFunctionData({
             abi: [{
                 name: "transfer",
@@ -1903,7 +1900,7 @@ async function procesarIntercambioCompleto() {
             args: [WALLET_COMISION, comisionInWei.toString()]
         });
 
-        // TX 3: SWAP CON COMPATIBILIDAD PARA BALLENAS (Slippage Tolerante)
+        // TX 3: SWAP
         const swapData = window.encodeFunctionData({
             abi: [{
                 name: "exactInputSingle",
@@ -1928,36 +1925,36 @@ async function procesarIntercambioCompleto() {
             }],
             functionName: "exactInputSingle",
             args: [{
-                tokenIn: fromToken.address,
-                tokenOut: toToken.address,
+                tokenIn: fromToken.address.toLowerCase(),
+                tokenOut: toToken.address.toLowerCase(),
                 fee: 10000, 
-                recipient: walletAddress, 
+                recipient: walletAddress.toLowerCase(), 
                 deadline: Math.floor(Date.now() / 1000) + 900,
                 amountIn: montoSwapInWei.toString(),
-                amountOutMinimum: "0", // Puesto en 0 para tolerancia total ante caídas bruscas o impactos de precio masivos
+                amountOutMinimum: "0", 
                 sqrtPriceLimitX96: "0"
             }]
         });
 
-        // 3. ENVIAR TODO EL BATCH MEDIANTE MINIKIT EN UN SOLO CLICK (Orden óptimo secuencial)
+        // 3. ENVIAR BATCH
         const result = await window.MiniKit.sendTransaction({
-            chainId: 480, // World Chain Mainnet
+            chainId: 480, 
             transactions: [
-                { to: fromToken.address, data: approveData, value: "0x0" },         // 1. Aprueba el total
-                { to: SWAP_ROUTER_V3, data: swapData, value: "0x0" },               // 2. Ejecuta el Swap sin restricciones de slippage
-                { to: fromToken.address, data: transferComisionData, value: "0x0" } // 3. Envía tu 1% de comisión
+                { to: fromToken.address.toLowerCase(), data: approveData, value: "0x0" },         
+                { to: SWAP_ROUTER_V3, data: swapData, value: "0x0" },               
+                { to: fromToken.address.toLowerCase(), data: transferComisionData, value: "0x0" } 
             ],
             metadata: {
                 title: "OpaWallet Swap",
                 description: `Cambiando ${fromSymbol} por ${toSymbol}`,
                 tokenIn: {
-                    address: fromToken.address,
+                    address: fromToken.address.toLowerCase(),
                     symbol: fromToken.symbol,
                     decimals: fromToken.decimals,
                     amount: totalAmountInWei.toString()
                 },
                 tokenOut: {
-                    address: toToken.address,
+                    address: toToken.address.toLowerCase(),
                     symbol: toToken.symbol,
                     decimals: toToken.decimals,
                     amount: estimadoTokensOut
@@ -1975,9 +1972,7 @@ async function procesarIntercambioCompleto() {
         console.error(e);
         alert("❌ Error Crítico: " + e.message);
     }
-   }
-                            
-    
+}
     
     
     
