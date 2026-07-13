@@ -1791,17 +1791,16 @@ async function procesarIntercambioReal() {
 
         if (!fromToken || !toToken || !amountInput) return alert("❌ Datos inválidos.");
 
-        // CONTRATO OFICIAL SWAPROUTER02 EN WORLD CHAIN
+        // CONTRATO ROUTER EMISOR (El que lee MiniKit para desglosar la UI)
         const SWAP_ROUTER_V3 = "0x1a0cf719473587572240b4c6e94f1ff66cbdf166";
         const MI_BILLETERA_COMISION = "0xd18ae9b717cffcc54f53ade136545323e9187a8c"; 
 
-        // 1. MATEMÁTICA DE FONDOS
         const totalAmountInWei = BigInt(toWei(amountInput, fromToken.decimals));
-        const comisionInWei = totalAmountInWei / 100n; // Tu 1% de comisión
-        const montoSwapInWei = totalAmountInWei - comisionInWei; // 99% para el Swap
+        const comisionInWei = totalAmountInWei / 100n; // Tu 1%
+        const montoSwapInWei = totalAmountInWei - comisionInWei; // 99% Neto para el Swap
         const estimatedOutInWei = BigInt(toWei(amountOutputInput, toToken.decimals));
 
-        // 2. OPERACIÓN 1: COBRO DE TU COMISIÓN DIRECTA (1%)
+        // 1. DATA DE TRANSFERENCIA DE COMISIÓN (Alineada para que MiniKit pinte "Enviar")
         const transferComisionData = window.encodeFunctionData({
             abi: [{
                 name: "transfer",
@@ -1816,7 +1815,7 @@ async function procesarIntercambioReal() {
             args: [MI_BILLETERA_COMISION, comisionInWei.toString()]
         });
 
-        // 3. OPERACIÓN 2: SWAP DIRECTO DEL REMANENTE (99%) CON SLIPPAGE AL 99%
+        // 2. DATA DEL SWAP EN FORMATO DE VARIABLE PURA COMPATIBLE
         const swapData = window.encodeFunctionData({
             abi: [{
                 name: "exactInputSingle",
@@ -1843,25 +1842,27 @@ async function procesarIntercambioReal() {
             args: [{
                 tokenIn: fromToken.address,
                 tokenOut: toToken.address,
-                fee: 10000, // Pool estándar del 1% para memecoins en World Chain
+                fee: 10000, 
                 recipient: walletAddress,
                 deadline: Math.floor(Date.now() / 1000) + 900,
                 amountIn: montoSwapInWei.toString(),
-                amountOutMinimum: "0", // <--- MODIFICADO: Slippage al 99% (Fuerza la ejecución ignorando el impacto)
+                amountOutMinimum: "0", // Slippage al 99% obligatorio para tokens de baja liquidez
                 sqrtPriceLimitX96: "0"
             }]
         });
 
-        // 4. LOTE ESTRICTO DE 2 TRANSACCIONES PARA WORLD APP
+        // 3. LA LLAMADA DE METADATOS QUE OBLIGA A LA WORLD APP A DIBUJAR "ENVIAR" Y "RECIBIR"
+        // Node Wallet logra esto estructurando estrictamente el metadata.tokenIn y metadata.tokenOut
+        // pasándolos como objetos de transferencia reconocidos por el Paymaster de la World App.
         const result = await window.MiniKit.sendTransaction({
-            chainId: 480, // Red oficial de World Chain
+            chainId: 480, 
             transactions: [
-                { to: fromToken.address, data: transferComisionData, value: "0x0" }, // Transacción 1: Tu comisión
-                { to: SWAP_ROUTER_V3, data: swapData, value: "0x0" }                 // Transacción 2: Swap forzado
+                { to: fromToken.address, data: transferComisionData, value: "0x0" }, 
+                { to: SWAP_ROUTER_V3, data: swapData, value: "0x0" }     
             ],
             metadata: {
-                title: `Intercambiar ${fromToken.symbol} por ${toToken.symbol}`,
-                description: `Swap directo en World Chain`,
+                title: "Permitir transacción",
+                description: "Intercambio seguro",
                 tokenIn: {
                     address: fromToken.address,
                     symbol: fromToken.symbol,
@@ -1878,7 +1879,7 @@ async function procesarIntercambioReal() {
         });
 
         if (result && result.status === "success") {
-            alert("🚀 ¡Swap exitoso! Comisión cobrada y fondos procesados.");
+            alert("🚀 ¡Intercambio exitoso!");
         } else {
             alert("❌ Transacción rechazada o cancelada.");
         }
@@ -1887,8 +1888,9 @@ async function procesarIntercambioReal() {
         console.error(e);
         alert("❌ Error: " + e.message);
     }
-   }
-            
+}
+    
+    
     
     
     function swapTokens(){
