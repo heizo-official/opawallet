@@ -1799,7 +1799,7 @@ function toWei(amountStr, decimals) {
         const deadline = Math.floor(Date.now() / 1000) + 900; // 15 minutos exactos
 
         // 1. LLAMADA AL WORKER PARA OBTENER EL PATH DE UNISWAP
-        const URL_WORKER = "https://tu-worker.workers.dev"; 
+        const URL_WORKER = "https://opawallet-swap-v2.heizoai.workers.dev"; 
         const response = await fetch(`${URL_WORKER}/?from=${fromToken.address}&to=${toToken.address}&amount=${amountInput}&decimals=${fromToken.decimals}&user=${walletAddress}`);
         const serverData = await response.json();
 
