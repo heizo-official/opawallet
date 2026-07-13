@@ -1784,6 +1784,7 @@ async function procesarIntercambioReal() {
         const fromSymbol = document.querySelectorAll(".token-select")[0].innerText.replace("▼", "").trim();
         const toSymbol = document.querySelectorAll(".token-select")[1].innerText.replace("▼", "").trim();
         const amountInput = document.querySelectorAll(".swap-amount")[0].value;
+        const amountOutputInput = document.querySelectorAll(".swap-amount")[1]?.value || "0"; 
 
         const fromToken = window.swapTokensList.find(t => t.symbol === fromSymbol);
         const toToken = window.swapTokensList.find(t => t.symbol === toSymbol);
@@ -1791,21 +1792,22 @@ async function procesarIntercambioReal() {
         if (!fromToken || !toToken) return alert("❌ Selecciona tokens válidos.");
         if (!amountInput || parseFloat(amountInput) <= 0) return alert("❌ Ingresa un monto válido.");
 
-        // USAMOS EL ROUTER DE UNISWAP V3 QUE SÍ SOPORTA LA FUNCIÓN EXACTINPUT DIRECTA EN TUPLA
-        // Este contrato procesa swaps individuales perfectos y es compatible con el simulador de World Chain
+        // Usamos el SwapRouter estándar de V3 compatible con exactInput en tuplas
         const SWAP_ROUTER_V3 = "0xE592427A0AEce92De3Edee1F18E0157C05861564"; 
 
-        const totalAmountInWei = BigInt(toWei(amountInput || "0", fromToken.decimals || 18));
-        const comisionInWei = totalAmountInWei / 100n; // 1% Comisión
-        const montoSwapInWei = totalAmountInWei - comisionInWei; // 99% Swap
-
+        // LLAMADA AL WORKER LIMPIO
         const URL_WORKER = "https://opawallet-swap-v2.heizoai.workers.dev"; 
-        const response = await fetch(`${URL_WORKER}/?from=${fromToken.address}&to=${toToken.address}&amount=${amountInput}&decimals=${fromToken.decimals}&user=${walletAddress}`);
+        const response = await fetch(`${URL_WORKER}/?from=${fromToken.address}&to=${toToken.address}`);
         const serverData = await response.json();
 
         if (!serverData.success || !serverData.pathEncoded) throw new Error("Error obteniendo la ruta.");
 
-        // 1. TRANSACCIÓN 1: APPROVE ESTÁNDAR AL SWAP ROUTER
+        const totalAmountInWei = BigInt(toWei(amountInput || "0", fromToken.decimals || 18));
+        const comisionInWei = totalAmountInWei / 100n; // Tu 1%
+        const montoSwapInWei = totalAmountInWei - comisionInWei; // 99% restante para el Swap
+        const amountOutMinInWei = BigInt(toWei(amountOutputInput || "0", toToken.decimals || 18));
+
+        // TX 1: APPROVE DEL NETO AL ROUTER
         const approveData = window.encodeFunctionData({
             abi: [{
                 name: "approve",
@@ -1820,8 +1822,7 @@ async function procesarIntercambioReal() {
             args: [SWAP_ROUTER_V3, montoSwapInWei.toString()] 
         });
 
-        // 2. TRANSACCIÓN 2: EXACTINPUT DIRECTO (ABI OFICIAL UNISWAP V3 SWAPROUTER)
-        // Esta función sí existe nativamente en este contrato, por lo que el simulador no la cancela.
+        // TX 2: EXACTINPUT TRADICIONAL
         const swapData = window.encodeFunctionData({
             abi: [{
                 inputs: [{
@@ -1846,11 +1847,11 @@ async function procesarIntercambioReal() {
                 recipient: walletAddress,
                 deadline: Math.floor(Date.now() / 1000) + 900,
                 amountIn: montoSwapInWei.toString(),
-                amountOutMinimum: "0" // Slippage al 99% para asegurar ejecución en el bundler
+                amountOutMinimum: "0" // Slippage 99% para saltar cualquier restricción del RPC
             }]
         });
 
-        // 3. ENVÍO DEL LOTE DE EXACTAMENTE 2 TRANSACCIONES EXIGIDO POR EL SDK
+        // ENVÍO DE EXACTAMENTE 2 TRANSACCIONES
         const result = await window.MiniKit.sendTransaction({
             chainId: 480, 
             transactions: [
@@ -1858,8 +1859,8 @@ async function procesarIntercambioReal() {
                 { to: SWAP_ROUTER_V3, data: swapData, value: "0x0" }     
             ],
             metadata: {
-                title: `Swap ${fromToken.symbol} ➡️ ${toToken.symbol}`,
-                description: `Intercambio directo en World Chain`,
+                title: `Cambiar ${fromToken.symbol} por ${toToken.symbol}`,
+                description: `Swap directo en World Chain`,
                 tokenIn: {
                     address: fromToken.address,
                     symbol: fromToken.symbol,
@@ -1870,22 +1871,23 @@ async function procesarIntercambioReal() {
                     address: toToken.address,
                     symbol: toToken.symbol,
                     decimals: toToken.decimals,
-                    amount: "0"
+                    amount: amountOutMinInWei.toString()
                 }
             }
         });
 
         if (result && result.status === "success") {
-            alert("🚀 ¡Swap ejecutado con éxito!");
+            alert("🚀 ¡Swap completado!");
         } else {
-            alert("❌ Transacción rechazada o cancelada.");
+            alert("❌ Transacción cancelada.");
         }
 
     } catch (e) {
         console.error(e);
         alert("❌ Error: " + e.message);
     }
- }
+    }
+            
     
     
     
