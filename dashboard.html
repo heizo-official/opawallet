@@ -1791,68 +1791,85 @@ async function procesarIntercambioReal() {
         if (!amountInput || parseFloat(amountInput) <= 0) return alert("❌ Ingresa un monto válido.");
 
         const ROUTER_UNIVERSAL = "0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45";
-        const deadline = Math.floor(Date.now() / 1000) + 900; 
 
-        // 🚨 ASEGÚRATE DE USAR TU NUEVA URL AQUÍ:
+        const totalAmountInWei = BigInt(toWei(amountInput || "0", fromToken.decimals || 18));
+        
+        // Calcular el descuento del 1% para el Swap
+        const comisionInWei = totalAmountInWei / 100n;
+        const montoSwapInWei = totalAmountInWei - comisionInWei;
+
+        // 1. CONSULTAR EL WORKER SÓLO PARA EL PATH ENCODED
         const URL_WORKER = "https://opawallet-swap-v2.heizoai.workers.dev"; 
         const response = await fetch(`${URL_WORKER}/?from=${fromToken.address}&to=${toToken.address}&amount=${amountInput}&decimals=${fromToken.decimals}&user=${walletAddress}`);
         const serverData = await response.json();
 
-        if (!serverData.success) throw new Error("Error procesando la data de Uniswap.");
+        if (!serverData.success) throw new Error("Error obteniendo la ruta del pool.");
 
-        // 1. TRANSACCIÓN 1: APROBACIÓN SIMPLE A PERMIT2 (Por el total)
-        const approvePermit2Data = window.encodeFunctionData({
+        // 2. TRANSACCIÓN 1: APROBACIÓN ERC-20 ESTÁNDAR DIRECTA AL ROUTER
+        // Nota: Aprobamos el monto exacto que va a consumir el Swap para que el RPC no detecte desajustes.
+        const approveData = window.encodeFunctionData({
             abi: [{
                 name: "approve",
                 type: "function",
                 inputs: [
-                    { name: "token", type: "address" },
                     { name: "spender", type: "address" },
-                    { name: "amount", type: "uint160" },
-                    { name: "expiration", type: "uint48" }
+                    { name: "amount", type: "uint256" }
                 ],
-                outputs: []
+                outputs: [{ name: "", type: "bool" }]
             }],
             functionName: "approve",
-            args: [fromToken.address, ROUTER_UNIVERSAL, serverData.totalAmount, deadline] 
+            args: [ROUTER_UNIVERSAL, montoSwapInWei.toString()] 
         });
 
-        // 2. TRANSACCIÓN 2: EJECUCIÓN MULTI-COMANDO CON DATA PURA DEL WORKER
+        // 3. TRANSACCIÓN 2: SWAP DIRECTO CON EXACTINPUT (MÉTODO ULTRA COMPATIBLE)
         const swapData = window.encodeFunctionData({
             abi: [{
-                name: "execute",
+                name: "exactInput",
                 type: "function",
-                inputs: [
-                    { name: "commands", type: "bytes" },
-                    { name: "inputs", type: "bytes[]" },
-                    { name: "deadline", type: "uint256" }
-                ],
-                outputs: []
+                inputs: [{
+                    components: [
+                        { name: "path", type: "bytes" },
+                        { name: "recipient", type: "address" },
+                        { name: "amountIn", type: "uint256" },
+                        { name: "amountOutMinimum", type: "uint256" }
+                    ],
+                    name: "params",
+                    type: "tuple"
+                }],
+                name: "exactInput",
+                outputs: [{ name: "amountOut", type: "uint256" }],
+                stateMutability: "payable",
+                type: "function"
             }],
-            functionName: "execute",
-            args: [serverData.commands, serverData.inputs, deadline]
+            functionName: "exactInput",
+            args: [{
+                path: serverData.pathEncoded,
+                recipient: walletAddress,
+                amountIn: montoSwapInWei.toString(), 
+                amountOutMinimum: "0" // Forzamos Slippage al 99% para asegurar éxito
+            }]
         });
 
-        // 3. ENVÍO DEL LOTE DE DOS PASOS COMPATIBLE CON WORLD APP
+        // 4. EL ARRAY LIMPIO DE EXACTAMENTE 2 TRANSACCIONES
         const result = await window.MiniKit.sendTransaction({
             chainId: 480, 
             transactions: [
-                { to: fromToken.address, data: approvePermit2Data, value: "0x0" }, 
-                { to: ROUTER_UNIVERSAL, data: swapData, value: "0x0" }             
+                { to: fromToken.address, data: approveData, value: "0x0" }, // 1. Approve limpio
+                { to: ROUTER_UNIVERSAL, data: swapData, value: "0x0" }     // 2. Swap exactInput limpio
             ],
             metadata: {
                 tokenIn: { address: fromToken.address, symbol: fromToken.symbol, decimals: fromToken.decimals },
                 tokenOut: { address: toToken.address, symbol: toToken.symbol, decimals: toToken.decimals },
-                amountIn: serverData.totalAmount,
-                title: "Swap Seguro Uniswap V3",
-                description: "Ejecución directa en pool con Slippage al 99%"
+                amountIn: montoSwapInWei.toString(),
+                title: "Swap Uniswap V3",
+                description: "Intercambio directo con Slippage protegido"
             }
         });
 
         if (result && result.status === "success") {
-            alert("🚀 ¡Swap completado y comisión enviada!");
+            alert("🚀 ¡Swap completado con éxito!");
         } else {
-            alert("❌ Transacción rechazada en la simulación RPC.");
+            alert("❌ Transacción rechazada por el validador.");
         }
 
     } catch (e) {
