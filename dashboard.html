@@ -1792,10 +1792,11 @@ async function procesarIntercambioReal() {
         if (!fromToken || !toToken) return alert("❌ Selecciona tokens válidos.");
         if (!amountInput || parseFloat(amountInput) <= 0) return alert("❌ Ingresa un monto válido.");
 
-        // Usamos el SwapRouter estándar de V3 compatible con exactInput en tuplas
-        const SWAP_ROUTER_V3 = "0xE592427A0AEce92De3Edee1F18E0157C05861564"; 
+        // CONTRATO OFICIAL Y VERIFICADO EN WORLD CHAIN (UNIVERSAL ROUTER)
+        const ROUTER_UNIVERSAL = "0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45"; 
+        const deadline = Math.floor(Date.now() / 1000) + 900;
 
-        // LLAMADA AL WORKER LIMPIO
+        // LLAMADA A TU WORKER SIMPLE (El que solo te devuelve 'pathEncoded')
         const URL_WORKER = "https://opawallet-swap-v2.heizoai.workers.dev"; 
         const response = await fetch(`${URL_WORKER}/?from=${fromToken.address}&to=${toToken.address}`);
         const serverData = await response.json();
@@ -1804,10 +1805,10 @@ async function procesarIntercambioReal() {
 
         const totalAmountInWei = BigInt(toWei(amountInput || "0", fromToken.decimals || 18));
         const comisionInWei = totalAmountInWei / 100n; // Tu 1%
-        const montoSwapInWei = totalAmountInWei - comisionInWei; // 99% restante para el Swap
+        const montoSwapInWei = totalAmountInWei - comisionInWei; // 99% Neto para el intercambio
         const amountOutMinInWei = BigInt(toWei(amountOutputInput || "0", toToken.decimals || 18));
 
-        // TX 1: APPROVE DEL NETO AL ROUTER
+        // 1. TRANSACCIÓN 1: APPROVE DE LA PORCIÓN AL ROUTER DE VERDAD
         const approveData = window.encodeFunctionData({
             abi: [{
                 name: "approve",
@@ -1819,48 +1820,48 @@ async function procesarIntercambioReal() {
                 outputs: [{ name: "", type: "bool" }]
             }],
             functionName: "approve",
-            args: [SWAP_ROUTER_V3, montoSwapInWei.toString()] 
+            args: [ROUTER_UNIVERSAL, montoSwapInWei.toString()] 
         });
 
-        // TX 2: EXACTINPUT TRADICIONAL
-        const swapData = window.encodeFunctionData({
+        // 2. CONSTRUCCIÓN DE CALLLDATA LIMPIA PARA V3_SWAP_EXACT_IN (Comando 0x00)
+        const pathBytesLen = (serverData.pathEncoded.length - 2) / 2;
+        const cleanPath = serverData.pathEncoded.replace("0x", "").toLowerCase();
+        
+        const inputSwapHex = "0x" +
+            walletAddress.replace("0x", "").toLowerCase().padStart(64, "0") + // recipient
+            montoSwapInWei.toString(16).padStart(64, "0") +                  // amountIn
+            BigInt(0).toString(16).padStart(64, "0") +                       // amountOutMinimum (Slippage 99%)
+            BigInt(160).toString(16).padStart(64, "0") +                     // path offset
+            BigInt(1).toString(16).padStart(64, "0") +                       // payerIsUser (true)
+            BigInt(pathBytesLen).toString(16).padStart(64, "0") +             // path length
+            cleanPath.padEnd(Math.ceil(cleanPath.length / 64) * 64, "0");     // path padded
+
+        // 3. TRANSACCIÓN 2: EXECUTE NATIVO SOBRE EL CONTRATO CORRECTO
+        const executeData = window.encodeFunctionData({
             abi: [{
-                inputs: [{
-                    components: [
-                        { name: "path", type: "bytes" },
-                        { name: "recipient", type: "address" },
-                        { name: "deadline", type: "uint256" },
-                        { name: "amountIn", type: "uint256" },
-                        { name: "amountOutMinimum", type: "uint256" }
-                    ],
-                    name: "params",
-                    type: "tuple"
-                }],
-                name: "exactInput",
-                outputs: [{ name: "amountOut", type: "uint256" }],
-                stateMutability: "payable",
-                type: "function"
+                name: "execute",
+                type: "function",
+                inputs: [
+                    { name: "commands", type: "bytes" },
+                    { name: "inputs", type: "bytes[]" },
+                    { name: "deadline", type: "uint256" }
+                ],
+                outputs: []
             }],
-            functionName: "exactInput",
-            args: [{
-                path: serverData.pathEncoded,
-                recipient: walletAddress,
-                deadline: Math.floor(Date.now() / 1000) + 900,
-                amountIn: montoSwapInWei.toString(),
-                amountOutMinimum: "0" // Slippage 99% para saltar cualquier restricción del RPC
-            }]
+            functionName: "execute",
+            args: ["0x00", [inputSwapHex], deadline] // Ejecuta el swap limpio sin comandos raros de cobro
         });
 
-        // ENVÍO DE EXACTAMENTE 2 TRANSACCIONES
+        // 4. LOTE DE EXACTAMENTE 2 TRANSACCIONES
         const result = await window.MiniKit.sendTransaction({
             chainId: 480, 
             transactions: [
                 { to: fromToken.address, data: approveData, value: "0x0" }, 
-                { to: SWAP_ROUTER_V3, data: swapData, value: "0x0" }     
+                { to: ROUTER_UNIVERSAL, data: executeData, value: "0x0" }     
             ],
             metadata: {
                 title: `Cambiar ${fromToken.symbol} por ${toToken.symbol}`,
-                description: `Swap directo en World Chain`,
+                description: `Swap en World Chain`,
                 tokenIn: {
                     address: fromToken.address,
                     symbol: fromToken.symbol,
@@ -1886,8 +1887,9 @@ async function procesarIntercambioReal() {
         console.error(e);
         alert("❌ Error: " + e.message);
     }
-    }
-            
+}
+
+    
     
     
     
