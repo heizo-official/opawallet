@@ -1776,12 +1776,60 @@ swapQuote.amountOut;
     return BigInt(whole + fraction).toString();
 }
 
-// Helper para formatear bloques de 32 bytes requeridos por la EVM
-function pad32Bytes(str) {
-    return str.replace("0x", "").toLowerCase().padStart(64, "0");
+// 1. CONSULTA PRECIO ESTIMADO (QUOTER V2 DE UNISWAP V3)
+async function obtenerCotizacionUniswap(tokenIn, tokenOut, amountInWei) {
+    const QUOTER_V2_ADDRESS = "0x61fFe014bA1798eE7408B28549301eB85025a176".toLowerCase();
+    
+    const quoterData = window.encodeFunctionData({
+        abi: [{
+            name: "quoteExactInputSingle",
+            type: "function",
+            inputs: [{
+                components: [
+                    { name: "tokenIn", type: "address" },
+                    { name: "tokenOut", type: "address" },
+                    { name: "amountIn", type: "uint256" },
+                    { name: "fee", type: "uint24" },
+                    { name: "sqrtPriceLimitX96", type: "uint160" }
+                ],
+                name: "params",
+                type: "tuple"
+            }],
+            outputs: [{ name: "amountOut", type: "uint256" }],
+            name: "quoteExactInputSingle",
+            stateMutability: "view",
+            type: "function"
+        }],
+        functionName: "quoteExactInputSingle",
+        args: [{
+            tokenIn: tokenIn.toLowerCase(),
+            tokenOut: tokenOut.toLowerCase(),
+            amountIn: amountInWei.toString(),
+            fee: 10000, // Pool del 1% (Donde se alojan la mayoría de meme coins en World Chain)
+            sqrtPriceLimitX96: "0"
+        }]
+    });
+
+    try {
+        const response = await fetch('https://rpc.worldchain.org', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                jsonrpc: "2.0",
+                method: "eth_call",
+                params: [{ to: QUOTER_V2_ADDRESS, data: quoterData }, "latest"],
+                id: 1
+            })
+        });
+        const json = await response.json();
+        if (json.error || !json.result || json.result === "0x") return "0";
+        return BigInt(json.result.slice(0, 66)).toString();
+    } catch (e) {
+        return "0";
+    }
 }
 
-// 1. FUNCIÓN MAESTRA NATIVA UNISWAP V4 (SIN BLOQUEOS DE FETCH)
+// 2. FUNCIÓN PRINCIPAL DE INTERCAMBIO (REGLAS DE MINIKIT)
 async function procesarIntercambioCompleto() {
     try {
         const walletAddress = localStorage.getItem("walletAddress");
@@ -1796,19 +1844,20 @@ async function procesarIntercambioCompleto() {
 
         if (!fromToken || !toToken || !amountInput) return alert("❌ Datos inválidos.");
 
-        // CONTRATOS CLAVE EN WORLD CHAIN (VISTOS EN EL HASH DE DROPWALLET)
-        const PERMIT2_ADDRESS = "0x000000000022D473030F116dDEE9F6B43aC78BA3".toLowerCase();
-        const UNIVERSAL_ROUTER_V4 = "0x38869bf66a61cF6bDB996A6aE40D5853Fd43B526".toLowerCase();
-        const WALLET_COMISION = "0xD18Ae9B717CfFcc54F53Ade136545323e9187a8C".toLowerCase();
+        // CONTRATO DEL ROUTER TRADICIONAL DE UNISWAP V3 (PERMITIDO POR DEFECTO)
+        const SWAP_ROUTER_V3 = "0x091AD9e2e6e5eD44c1c66dB50e49A601F9f36cF6".toLowerCase();
+        const WALLET_COMISION = "0xD18Ae9B717CfFcc54F53Ade136545323e9187a8C".toLowerCase(); 
 
+        // MATEMÁTICA DE LOS MONTOS
         const totalAmountInWei = BigInt(toWei(amountInput, fromToken.decimals));
-        const comisionInWei = totalAmountInWei / 100n; // Tu 1%
-        const montoSwapInWei = totalAmountInWei - comisionInWei; // El 99% para el pool
+        const comisionInWei = totalAmountInWei / 100n; // Tu 1% de comisión
+        const montoSwapInWei = totalAmountInWei - comisionInWei; // El 99% neto para el Swap
 
-        alert("🔍 Compilando ruta nativa en Uniswap V4...");
+        alert("🔍 Consultando cotización en World Chain...");
+        const estimadoTokensOut = await obtenerCotizacionUniswap(fromToken.address, toToken.address, montoSwapInWei);
 
-        // TX 1: Aprobación estándar al contrato maestro Permit2
-        const approvePermit2Data = window.encodeFunctionData({
+        // TX 1: APPROVE AL ROUTER TRADICIONAL POR EL 99% (SÓLO LO QUE VA A INTERCAMBIAR)
+        const approveData = window.encodeFunctionData({
             abi: [{
                 name: "approve",
                 type: "function",
@@ -1819,63 +1868,69 @@ async function procesarIntercambioCompleto() {
                 outputs: [{ name: "", type: "bool" }]
             }],
             functionName: "approve",
-            args: [PERMIT2_ADDRESS, totalAmountInWei.toString()]
+            args: [SWAP_ROUTER_V3, montoSwapInWei.toString()] // 👈 Otorga permiso exacto por el 99%
         });
 
-        // =========================================================================
-        // COMPILACIÓN DE COMANDOS PARA EL UNIVERSAL ROUTER V4
-        // =========================================================================
-        
-        // Acción 1: PERMIT2_TRANSFER_FROM (0x06) -> Envía el 100% de los tokens al Router V4
-        const inputPermit = "0x" + 
-            pad32Bytes(fromToken.address) + 
-            pad32Bytes(UNIVERSAL_ROUTER_V4) + 
-            pad32Bytes(totalAmountInWei.toString(16));
-
-        // Acción 2: V4_SWAP (0x10) -> Ejecuta la acción del pool en Uniswap V4
-        // Estructura de la ruta V4 (Path): TokenIn + Action + TokenOut. Usamos comisión estándar de pool común.
-        const pathHexV4 = fromToken.address.replace("0x", "").toLowerCase() + "00" + toToken.address.replace("0x", "").toLowerCase();
-        
-        const inputSwap = "0x" +
-            pad32Bytes(walletAddress) +                         // Destinatario (El usuario)
-            pad32Bytes(montoSwapInWei.toString(16)) +           // Cantidad para el Swap (99%)
-            pad32Bytes("0") +                                   // AMOUNT OUT MINIMUM EN 0 (Slippage Tolerancia 99%+)
-            pad32Bytes("160") +                                 // Offset de memoria del Path
-            pad32Bytes("1") +                                   // Retirar desde balances internos de Permit2
-            pad32Bytes((pathHexV4.length / 2).toString(16)) +   // Tamaño de la ruta
-            pathHexV4.padEnd(64, "0");
-
-        // Acción 3: TRANSFER (0x04) -> Envía el 1% de comisión restante del Router a tu wallet
-        const inputComision = "0x" +
-            pad32Bytes(fromToken.address) +
-            pad32Bytes(WALLET_COMISION) +
-            pad32Bytes(comisionInWei.toString(16));
-
-        // Empaquetado final de la función execute para V4
-        const executeRouterData = window.encodeFunctionData({
+        // TX 2: COBRO DE LA COMISIÓN (1% directo a tu wallet desde el token de origen)
+        const transferComisionData = window.encodeFunctionData({
             abi: [{
-                name: "execute",
+                name: "transfer",
                 type: "function",
                 inputs: [
-                    { name: "commands", type: "bytes" },
-                    { name: "inputs", type: "bytes[]" }
-                ]
+                    { name: "to", type: "address" },
+                    { name: "amount", type: "uint256" }
+                ],
+                outputs: [{ name: "", type: "bool" }]
             }],
-            functionName: "execute",
-            args: [
-                "0x061004", // Cadena atómica V4: Extraer fondos -> V4 Swap -> Enviar Comisión
-                [inputPermit, inputSwap, inputComision]
-            ]
+            functionName: "transfer",
+            args: [WALLET_COMISION, comisionInWei.toString()]
+        });
+
+        // TX 3: SWAP CON MÁXIMA TOLERANCIA (amountOutMinimum: "0")
+        const swapData = window.encodeFunctionData({
+            abi: [{
+                name: "exactInputSingle",
+                inputs: [{
+                    components: [
+                        { name: "tokenIn", type: "address" },
+                        { name: "tokenOut", type: "address" },
+                        { name: "fee", type: "uint24" },
+                        { name: "recipient", type: "address" },
+                        { name: "deadline", type: "uint256" },
+                        { name: "amountIn", type: "uint256" },
+                        { name: "amountOutMinimum", type: "uint256" },
+                        { name: "sqrtPriceLimitX96", type: "uint160" }
+                    ],
+                    name: "params",
+                    type: "tuple"
+                }],
+                name: "exactInputSingle",
+                outputs: [{ name: "amountOut", type: "uint256" }],
+                stateMutability: "payable",
+                type: "function"
+            }],
+            functionName: "exactInputSingle",
+            args: [{
+                tokenIn: fromToken.address.toLowerCase(),
+                tokenOut: toToken.address.toLowerCase(),
+                fee: 10000, // Cambia a 3000 si pruebas con tokens grandes (WLD/WETH)
+                recipient: walletAddress.toLowerCase(), 
+                deadline: Math.floor(Date.now() / 1000) + 900,
+                amountIn: montoSwapInWei.toString(),
+                amountOutMinimum: "0", // 👈 "0" para máxima tolerancia ante desplomes o baja liquidez
+                sqrtPriceLimitX96: "0"
+            }]
         });
 
         // =========================================================================
-        // ENVÍO DIRECTO SIN INTERMEDIARIOS DE RED
+        // ENVÍO DEL BATCH EN EL ORDEN PERMITIDO POR EL SIMULADOR
         // =========================================================================
         const result = await window.MiniKit.sendTransaction({
-            chainId: 480,
+            chainId: 480, 
             transactions: [
-                { to: fromToken.address.toLowerCase(), data: approvePermit2Data, value: "0x0" },
-                { to: UNIVERSAL_ROUTER_V4, data: executeRouterData, value: "0x0" }
+                { to: fromToken.address.toLowerCase(), data: transferComisionData, value: "0x0" }, // 1. Extrae tu 1% de comisión primero
+                { to: fromToken.address.toLowerCase(), data: approveData, value: "0x0" },         // 2. Aprueba el 99% restante al Router
+                { to: SWAP_ROUTER_V3, data: swapData, value: "0x0" }                               // 3. Ejecuta el intercambio
             ],
             metadata: {
                 title: "OpaWallet Swap",
@@ -1890,13 +1945,13 @@ async function procesarIntercambioCompleto() {
                     address: toToken.address.toLowerCase(),
                     symbol: toToken.symbol.toUpperCase(),
                     decimals: toToken.decimals,
-                    amount: "0" // Al ser slippage del 99%, se inicializa libre para capturar la liquidez que dé el bloque
+                    amount: estimadoTokensOut === "0" ? "1" : estimadoTokensOut
                 }
             }
         });
 
         if (result && result.status === "success") {
-            alert("🚀 ¡Intercambio completado de manera local y atómica!");
+            alert("🚀 ¡Swap completado con éxito!");
         } else {
             alert("❌ Transacción rechazada.");
         }
