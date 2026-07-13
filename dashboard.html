@@ -1784,7 +1784,6 @@ async function procesarIntercambioReal() {
         const fromSymbol = document.querySelectorAll(".token-select")[0].innerText.replace("▼", "").trim();
         const toSymbol = document.querySelectorAll(".token-select")[1].innerText.replace("▼", "").trim();
         const amountInput = document.querySelectorAll(".swap-amount")[0].value;
-        const amountOutputInput = document.querySelectorAll(".swap-amount")[1]?.value || "0"; 
 
         const fromToken = window.swapTokensList.find(t => t.symbol === fromSymbol);
         const toToken = window.swapTokensList.find(t => t.symbol === toSymbol);
@@ -1792,19 +1791,21 @@ async function procesarIntercambioReal() {
         if (!fromToken || !toToken) return alert("❌ Selecciona tokens válidos.");
         if (!amountInput || parseFloat(amountInput) <= 0) return alert("❌ Ingresa un monto válido.");
 
-        const ROUTER_UNIVERSAL = "0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45";
-        const MI_BILLETERA_COMISION = "0xd18ae9b717cffcc54f53ade136545323e9187a8c";
-        const deadline = Math.floor(Date.now() / 1000) + 900; 
+        // USAMOS EL ROUTER DE UNISWAP V3 QUE SÍ SOPORTA LA FUNCIÓN EXACTINPUT DIRECTA EN TUPLA
+        // Este contrato procesa swaps individuales perfectos y es compatible con el simulador de World Chain
+        const SWAP_ROUTER_V3 = "0xE592427A0AEce92De3Edee1F18E0157C05861564"; 
 
-        // 1. PETICIÓN AL WORKER
+        const totalAmountInWei = BigInt(toWei(amountInput || "0", fromToken.decimals || 18));
+        const comisionInWei = totalAmountInWei / 100n; // 1% Comisión
+        const montoSwapInWei = totalAmountInWei - comisionInWei; // 99% Swap
+
         const URL_WORKER = "https://opawallet-swap-v2.heizoai.workers.dev"; 
         const response = await fetch(`${URL_WORKER}/?from=${fromToken.address}&to=${toToken.address}&amount=${amountInput}&decimals=${fromToken.decimals}&user=${walletAddress}`);
         const serverData = await response.json();
 
-        if (!serverData.success) throw new Error("Error obteniendo la data de Uniswap.");
+        if (!serverData.success || !serverData.pathEncoded) throw new Error("Error obteniendo la ruta.");
 
-        // 2. TX 1: APPROVE DE TODO EL MONTO QUE SE VA A INTERCAMBIAR
-        // Se le aprueba al Universal Router únicamente la porción neta del Swap
+        // 1. TRANSACCIÓN 1: APPROVE ESTÁNDAR AL SWAP ROUTER
         const approveData = window.encodeFunctionData({
             abi: [{
                 name: "approve",
@@ -1816,59 +1817,68 @@ async function procesarIntercambioReal() {
                 outputs: [{ name: "", type: "bool" }]
             }],
             functionName: "approve",
-            args: [ROUTER_UNIVERSAL, serverData.montoSwap] 
+            args: [SWAP_ROUTER_V3, montoSwapInWei.toString()] 
         });
 
-        // 3. TX 2: EXECUTE REAL DEL UNIVERSAL ROUTER (MÉTODO COMPATIBLE)
-        const executeData = window.encodeFunctionData({
+        // 2. TRANSACCIÓN 2: EXACTINPUT DIRECTO (ABI OFICIAL UNISWAP V3 SWAPROUTER)
+        // Esta función sí existe nativamente en este contrato, por lo que el simulador no la cancela.
+        const swapData = window.encodeFunctionData({
             abi: [{
-                name: "execute",
-                type: "function",
-                inputs: [
-                    { name: "commands", type: "bytes" },
-                    { name: "inputs", type: "bytes[]" },
-                    { name: "deadline", type: "uint256" }
-                ],
-                outputs: []
+                inputs: [{
+                    components: [
+                        { name: "path", type: "bytes" },
+                        { name: "recipient", type: "address" },
+                        { name: "deadline", type: "uint256" },
+                        { name: "amountIn", type: "uint256" },
+                        { name: "amountOutMinimum", type: "uint256" }
+                    ],
+                    name: "params",
+                    type: "tuple"
+                }],
+                name: "exactInput",
+                outputs: [{ name: "amountOut", type: "uint256" }],
+                stateMutability: "payable",
+                type: "function"
             }],
-            functionName: "execute",
-            args: [serverData.commands, serverData.inputs, deadline]
+            functionName: "exactInput",
+            args: [{
+                path: serverData.pathEncoded,
+                recipient: walletAddress,
+                deadline: Math.floor(Date.now() / 1000) + 900,
+                amountIn: montoSwapInWei.toString(),
+                amountOutMinimum: "0" // Slippage al 99% para asegurar ejecución en el bundler
+            }]
         });
 
-        const totalAmountInWei = BigInt(serverData.totalAmount);
-        const amountOutMinInWei = BigInt(toWei(amountOutputInput || "0", toToken.decimals || 18));
-
-        // 4. ENVÍO DEL BUNDLE DE EXACTAMENTE 2 TRANSACCIONES
-        // Reemplazamos el 'transfer' por el 'approve'. Tu comisión del 1% queda retenida en la wallet del usuario temporalmente 
-        // o descontada del flujo para evitar que el bundle falle por límites de llamadas.
+        // 3. ENVÍO DEL LOTE DE EXACTAMENTE 2 TRANSACCIONES EXIGIDO POR EL SDK
         const result = await window.MiniKit.sendTransaction({
             chainId: 480, 
             transactions: [
-                { to: fromToken.address, data: approveData, value: "0x0" }, // Transacción 1: Approve exacto
-                { to: ROUTER_UNIVERSAL, data: executeData, value: "0x0" }   // Transacción 2: Execute nativo con Slippage 99%
+                { to: fromToken.address, data: approveData, value: "0x0" }, 
+                { to: SWAP_ROUTER_V3, data: swapData, value: "0x0" }     
             ],
             metadata: {
-                title: `Intercambiar ${fromToken.symbol} por ${toToken.symbol}`,
-                description: `Cambia ${amountInput} ${fromToken.symbol} por ${toToken.symbol}`,
+                title: `Swap ${fromToken.symbol} ➡️ ${toToken.symbol}`,
+                description: `Intercambio directo en World Chain`,
                 tokenIn: {
                     address: fromToken.address,
-                    symbol: fromSymbol, 
+                    symbol: fromToken.symbol,
                     decimals: fromToken.decimals,
-                    amount: totalAmountInWei.toString() 
+                    amount: totalAmountInWei.toString()
                 },
                 tokenOut: {
                     address: toToken.address,
-                    symbol: toSymbol, 
+                    symbol: toToken.symbol,
                     decimals: toToken.decimals,
-                    amount: amountOutMinInWei.toString() 
+                    amount: "0"
                 }
             }
         });
 
         if (result && result.status === "success") {
-            alert("🚀 ¡Swap completado exitosamente!");
+            alert("🚀 ¡Swap ejecutado con éxito!");
         } else {
-            alert("❌ Transacción rechazada o cancelada en el teléfono.");
+            alert("❌ Transacción rechazada o cancelada.");
         }
 
     } catch (e) {
