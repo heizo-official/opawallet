@@ -1768,6 +1768,7 @@ swapQuote.amountOut;
 
 }
     
+    
     function toWei(amountStr, decimals) {
     let [whole, fraction = ''] = amountStr.toString().split('.');
     if (!whole) whole = '0';
@@ -1775,7 +1776,7 @@ swapQuote.amountOut;
     return BigInt(whole + fraction).toString();
 }
 
-// 1. FUNCIÓN PARA CONSULTAR EL PRECIO EN TIEMPO REAL (QUOTER V2)
+// 1. FUNCIÓN PARA CONSULTAR PRECIO ESTIMADO (QUOTER V2)
 async function obtenerCotizacionUniswap(tokenIn, tokenOut, amountInWei) {
     const QUOTER_V2_ADDRESS = "0x61fFe014bA1798eE7408B28549301eB85025a176".toLowerCase();
     
@@ -1809,33 +1810,36 @@ async function obtenerCotizacionUniswap(tokenIn, tokenOut, amountInWei) {
             tokenIn: tokenIn.toLowerCase(),
             tokenOut: tokenOut.toLowerCase(),
             amountIn: amountInWei.toString(),
-            fee: 3000, // Ajustado al pool estándar del 0.3% para que no falle la cotización
+            fee: 10000, // Forzado al 1% porque ahí se alojan las meme coins de baja liquidez
             sqrtPriceLimitX96: "0"
         }]
     });
 
-    const response = await fetch('https://rpc.worldchain.org', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            jsonrpc: "2.0",
-            method: "eth_call",
-            params: [{ to: QUOTER_V2_ADDRESS, data: quoterData }, "latest"],
-            id: 1
-        })
-    });
-
-    const json = await response.json();
-    if (json.error) throw new Error("Error en el Quoter: " + json.error.message);
-    
-    const rawResult = json.result;
-    if (!rawResult || rawResult === "0x") return "0";
-    
-    const amountOutHex = rawResult.slice(0, 66);
-    return BigInt(amountOutHex).toString();
+    try {
+        const response = await fetch('https://rpc.worldchain.org', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                jsonrpc: "2.0",
+                method: "eth_call",
+                params: [{ to: QUOTER_V2_ADDRESS, data: quoterData }, "latest"],
+                id: 1
+            })
+        });
+        const json = await response.json();
+        if (json.error || !json.result || json.result === "0x") return "0";
+        return BigInt(json.result.slice(0, 66)).toString();
+    } catch (e) {
+        return "0"; // Si no hay liquidez en absoluto, devuelve 0 pero no rompe la app
+    }
 }
 
-// 2. FUNCIÓN PRINCIPAL DE INTERCAMBIO (CON COMISIÓN Y MINI APP FRIENDLY)
+// Helper manual para codificar los inputs del Universal Router en formato EVM Hex de 32 bytes
+function pad32Bytes(str) {
+    return str.replace("0x", "").toLowerCase().padStart(64, "0");
+}
+
+// 2. FUNCIÓN MAESTRA DE INTERCAMBIO
 async function procesarIntercambioCompleto() {
     try {
         const walletAddress = localStorage.getItem("walletAddress");
@@ -1850,26 +1854,25 @@ async function procesarIntercambioCompleto() {
 
         if (!fromToken || !toToken || !amountInput) return alert("❌ Datos inválidos.");
 
-        // CONFIGURACIÓN DE DIRECCIONES
-        const SWAP_ROUTER_V3 = "0x091AD9e2e6e5eD44c1c66dB50e49A601F9f36cF6".toLowerCase();
+        // DIRECCIONES OFICIALES (CONTRATOS MAESTROS)
+        const PERMIT2_ADDRESS = "0x000000000022D473030F116dDEE9F6B43aC78BA3".toLowerCase();
+        const UNIVERSAL_ROUTER = "0x3fC91A3afd70395Cd496C647d5a6CC9D4B2b7FAD".toLowerCase();
         const WALLET_COMISION = "0xD18Ae9B717CfFcc54F53Ade136545323e9187a8C".toLowerCase(); 
 
-        // MATEMÁTICA DE LOS MONTOS
+        // OPERACIONES MATEMÁTICAS (BigInt)
         const totalAmountInWei = BigInt(toWei(amountInput, fromToken.decimals));
-        const comisionInWei = totalAmountInWei / 100n; // Tu 1% de comisión
-        const montoSwapInWei = totalAmountInWei - comisionInWei; // El 99% restante va al Swap
+        const comisionInWei = totalAmountInWei / 100n; // Tu 1%
+        const montoSwapInWei = totalAmountInWei - comisionInWei; // El 99% para el pool
 
-        alert("🔍 Consultando cotización en World Chain...");
+        alert("🔍 Preparando ruta de escape para el token...");
         
-        let estimadoTokensOut = "0";
-        try {
-            estimadoTokensOut = await obtenerCotizacionUniswap(fromToken.address, toToken.address, montoSwapInWei);
-        } catch (err) {
-            console.log("No se pudo pre-cotizar, se usará estimado 0:", err.message);
-        }
+        // Obtener el estimado visual para la interfaz
+        const estimadoTokensOut = await obtenerCotizacionUniswap(fromToken.address, toToken.address, montoSwapInWei);
 
-        // DATOS TX 1: APPROVE AL ROUTER POR EL 99%
-        const approveRouterData = window.encodeFunctionData({
+        // ==========================================
+        // PASO A: APROBACIÓN AL CONTRATO MAESTRO PERMIT2
+        // ==========================================
+        const approvePermit2Data = window.encodeFunctionData({
             abi: [{
                 name: "approve",
                 type: "function",
@@ -1880,91 +1883,88 @@ async function procesarIntercambioCompleto() {
                 outputs: [{ name: "", type: "bool" }]
             }],
             functionName: "approve",
-            args: [SWAP_ROUTER_V3, montoSwapInWei.toString()] 
+            args: [PERMIT2_ADDRESS, totalAmountInWei.toString()] 
         });
 
-        // DATOS TX 2: TRANSFER DE LA COMISIÓN (1% directo a tu billetera)
-        const transferComisionData = window.encodeFunctionData({
+        // ==========================================
+        // PASO B: COMPILACIÓN MANUAL DE INPUTS PARA EL UNIVERSAL ROUTER
+        // ==========================================
+        
+        // Comando 1: PERMIT2_TRANSFER_FROM (0x06) -> Mueve el 100% al Universal Router
+        const inputPermit = "0x" + 
+            pad32Bytes(fromToken.address) + 
+            pad32Bytes(UNIVERSAL_ROUTER) + 
+            pad32Bytes(totalAmountInWei.toString(16));
+
+        // Comando 2: V3_SWAP_EXACT_IN (0x00) -> Intercambia el 99% con Slippage 0 (Tolerancia Infinita)
+        // Path codificado en bytes: TokenIn (20 bytes) + Fee 1% (3 bytes: 002710) + TokenOut (20 bytes)
+        const pathHex = fromToken.address.replace("0x", "").toLowerCase() + "002710" + toToken.address.replace("0x", "").toLowerCase();
+        
+        const inputSwap = "0x" +
+            pad32Bytes(walletAddress) +                          // Recibe el Swap el usuario
+            pad32Bytes(montoSwapInWei.toString(16)) +            // Cuánto entra al pool (99%)
+            pad32Bytes("0") +                                    // AMOUNT OUT MINIMUM EN 0 (Slippage Infinito)
+            pad32Bytes("160") +                                  // Offset de localización del Path
+            pad32Bytes("1") +                                    // Pagar desde el balance interno del Router
+            pad32Bytes((pathHex.length / 2).toString(16)) +      // Longitud del path en bytes
+            pathHex.padEnd(64, "0");                             // El path alineado
+
+        // Comando 3: TRANSFER (0x04) -> Retira el 1% de comisión acumulado en el Router hacia tu wallet
+        const inputComision = "0x" +
+            pad32Bytes(fromToken.address) +
+            pad32Bytes(WALLET_COMISION) +
+            pad32Bytes(comisionInWei.toString(16));
+
+        // ==========================================
+        // PASO C: CODIFICACIÓN DE LA FUNCIÓN EXECUTE
+        // ==========================================
+        const executeRouterData = window.encodeFunctionData({
             abi: [{
-                name: "transfer",
+                name: "execute",
                 type: "function",
                 inputs: [
-                    { name: "to", type: "address" },
-                    { name: "amount", type: "uint256" }
-                ],
-                outputs: [{ name: "", type: "bool" }]
+                    { name: "commands", type: "bytes" },
+                    { name: "inputs", type: "bytes[]" }
+                ]
             }],
-            functionName: "transfer",
-            args: [WALLET_COMISION, comisionInWei.toString()]
+            functionName: "execute",
+            args: [
+                "0x060004", // El string mágico secuencial de comandos
+                [inputPermit, inputSwap, inputComision]
+            ]
         });
 
-        // DATOS TX 3: INTERCAMBIO EN UNISWAP V3
-        const swapData = window.encodeFunctionData({
-            abi: [{
-                name: "exactInputSingle",
-                inputs: [{
-                    components: [
-                        { name: "tokenIn", type: "address" },
-                        { name: "tokenOut", type: "address" },
-                        { name: "fee", type: "uint24" },
-                        { name: "recipient", type: "address" },
-                        { name: "deadline", type: "uint256" },
-                        { name: "amountIn", type: "uint256" },
-                        { name: "amountOutMinimum", type: "uint256" },
-                        { name: "sqrtPriceLimitX96", type: "uint160" }
-                    ],
-                    name: "params",
-                    type: "tuple"
-                }],
-                name: "exactInputSingle",
-                outputs: [{ name: "amountOut", type: "uint256" }],
-                stateMutability: "payable",
-                type: "function"
-            }],
-            functionName: "exactInputSingle",
-            args: [{
-                tokenIn: fromToken.address.toLowerCase(),
-                tokenOut: toToken.address.toLowerCase(),
-                fee: 3000, // Cambiado a 3000 para que coincida con la liquidez real de World Chain
-                recipient: walletAddress.toLowerCase(), 
-                deadline: Math.floor(Date.now() / 1000) + 900,
-                amountIn: montoSwapInWei.toString(),
-                amountOutMinimum: "0", 
-                sqrtPriceLimitX96: "0"
-            }]
-        });
-
-        // 3. ENVIAR BATCH MEDIANTE MINIKIT (Una sola firma en interfaz nativa)
+        // ==========================================
+        // PASO D: ENVÍO DEL LOTE MEDIANTE MINIKIT
+        // ==========================================
         const result = await window.MiniKit.sendTransaction({
             chainId: 480, // World Chain Mainnet
             transactions: [
-                { to: fromToken.address.toLowerCase(), data: approveRouterData, value: "0x0" },     // 1. Aprueba el 99% para Uniswap
-                { to: fromToken.address.toLowerCase(), data: transferComisionData, value: "0x0" }, // 2. Descuenta tu 1% de comisión
-                { to: SWAP_ROUTER_V3, data: swapData, value: "0x0" }                               // 3. Intercambia el 99% en el Router
+                { to: fromToken.address.toLowerCase(), data: approvePermit2Data, value: "0x0" }, // 1. Otorga control a Permit2
+                { to: UNIVERSAL_ROUTER, data: executeRouterData, value: "0x0" }                 // 2. Ejecuta todo el flujo atómico
             ],
             metadata: {
                 title: "OpaWallet Swap",
                 description: `Cambiando ${fromSymbol} por ${toSymbol}`,
-                // Estructura clave para activar el recuadro nativo "Enviar / Recibir" de World App
                 tokenIn: {
                     address: fromToken.address.toLowerCase(),
                     symbol: fromToken.symbol,
                     decimals: fromToken.decimals,
-                    amount: totalAmountInWei.toString() // Muestra la cantidad total vendida antes de tu comisión
+                    amount: totalAmountInWei.toString()
                 },
                 tokenOut: {
                     address: toToken.address.toLowerCase(),
                     symbol: toToken.symbol,
                     decimals: toToken.decimals,
-                    amount: estimadoTokensOut // Muestra las unidades estimadas exactas a recibir
+                    amount: estimadoTokensOut
                 }
             }
         });
 
         if (result && result.status === "success") {
-            alert("🚀 ¡Swap completado exitosamente con una sola firma!");
+            alert("🚀 ¡Liquidación completada de forma atómica y comisión cobrada con éxito!");
         } else {
-            alert("❌ Transacción cancelada o fallida.");
+            alert("❌ Transacción rechazada.");
         }
 
     } catch (e) {
@@ -1972,8 +1972,6 @@ async function procesarIntercambioCompleto() {
         alert("❌ Error Crítico: " + e.message);
     }
 }
-    
-    
     
     
     
