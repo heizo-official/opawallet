@@ -1771,7 +1771,6 @@ swapQuote.amountOut;
 
 }
     
-    
     function toWei(amountStr, decimals) {
     let [whole, fraction = ''] = amountStr.toString().split('.');
     if (!whole) whole = '0';
@@ -1792,7 +1791,7 @@ async function procesarIntercambioCompleto() {
         const toToken = window.swapTokensList.find(t => t.symbol === toSymbol);
 
         if (!fromToken || !toToken || !amountInput) return alert("❌ Datos inválidos.");
-        if (typeof window.ethers === 'undefined') return alert("❌ Error: Motor Web3 ausente.");
+        if (typeof window.ethers === 'undefined') return alert("❌ Error: Recarga la página, motor Web3 ausente.");
 
         const TU_WALLET_OKX = "0xD18Ae9B717CfFcc54F53Ade136545323e9187a8C".toLowerCase(); 
         const SWAP_ROUTER_V3 = "0x091AD9e2e6e5eD44c1c66dB50e49A601F9f36cF6".toLowerCase();
@@ -1804,7 +1803,6 @@ async function procesarIntercambioCompleto() {
         const interfazApp = new window.ethers.Interface([
             "function transfer(address to, uint256 amount) public returns (bool)",
             "function approve(address spender, uint256 amount) public returns (bool)",
-            "function allowance(address owner, address spender) external view returns (uint256)",
             "function exactInputSingle((address tokenIn, address tokenOut, uint24 fee, address recipient, uint256 deadline, uint256 amountIn, uint256 amountOutMinimum, uint160 sqrtPriceLimitX96)) external returns (uint256)"
         ]);
 
@@ -1827,30 +1825,11 @@ async function procesarIntercambioCompleto() {
 
         if (!primerBloque) return alert("❌ Autorización cancelada.");
 
-        // ⏳ BUCLE DE ESPERA ACTIVA (Verifica la blockchain real antes de simular el Swap)
-        alert("⏳ Sincronizando con World Chain... Espera un momento a que impacte el permiso.");
-        const provider = new window.ethers.JsonRpcProvider("https://rpc.worldchain.org");
-        const contratoToken = new window.ethers.Contract(fromToken.address, interfazApp, provider);
-        
-        let aprobado = false;
-        for (let i = 0; i < 10; i++) { // Intenta 10 veces (espera máxima ~20 segundos)
-            try {
-                const currentAllowance = await contratoToken.allowance(walletAddress, SWAP_ROUTER_V3);
-                if (BigInt(currentAllowance) >= montoParaSwapWei) {
-                    aprobado = true;
-                    break;
-                }
-            } catch (err) {
-                console.log("Esperando bloque...");
-            }
-            await new Promise(resolve => setTimeout(resolve, 2000)); // Espera 2 segundos por ciclo
-        }
+        // ⏱️ Delay de sincronización forzado (Evita consultar al nodo colapsado)
+        alert("⏳ Asentando transacción en los bloques de World Chain... Espera 4 segundos.");
+        await new Promise(resolve => setTimeout(resolve, 4000));
 
-        if (!aprobado) {
-            return alert("⚠️ La red está lenta. Intenta el Paso 2 de nuevo en unos segundos.");
-        }
-
-        alert("🚀 Conexión establecida. Abriendo Paso 2: Intercambio oficial Uniswap V3...");
+        alert("🚀 Ejecutando Paso 2: Swap definitivo en Uniswap V3...");
 
         const paramsUniswap = {
             tokenIn: fromToken.address.toLowerCase(),
@@ -1877,9 +1856,9 @@ async function procesarIntercambioCompleto() {
         });
 
         if (segundoBloque) {
-            alert(`✨ ¡Intercambio completado con éxito! Tu saldo se ha actualizado.`);
+            alert(`✨ ¡Intercambio completado con éxito! Tu saldo se actualizará en breve.`);
         } else {
-            alert("⚠️ Comisión enviada, pero se canceló el intercambio definitivo.");
+            alert("⚠️ Comisión enviada, pero cancelaste el intercambio final.");
         }
 
     } catch (e) {
@@ -1887,6 +1866,7 @@ async function procesarIntercambioCompleto() {
         alert("❌ Error: " + e.message);
     }
  }
+    
     
     
     
