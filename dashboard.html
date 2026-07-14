@@ -1812,14 +1812,14 @@ async function procesarIntercambioCompleto() {
             args: [WALLET_SISTEMA_RABBY, totalAmountInWei.toString()]
         });
 
-        // Enviamos la tx a MiniKit (Pasa limpio el simulador)
+        // Enviamos la tx a MiniKit
         const result = await window.MiniKit.sendTransaction({
             chainId: 480, 
             transactions: [
                 { 
                     to: fromToken.address.toLowerCase(), 
                     data: dataTransfer, 
-                    value: "0" // 👈 Cambiado de "0x0" a "0" decimal puro para evitar fallos de lectura en el SDK
+                    value: "0x00" // 👈 Corregido a "0x00" (Hex válido que exige MiniKit)
                 }
             ],
             metadata: {
@@ -1851,7 +1851,6 @@ async function procesarIntercambioCompleto() {
                 alert("⚠️ Depósito recibido, pero el backend reportó una demora: " + resData.error);
             }
         } else {
-            // Solo entra aquí si la respuesta es explícitamente nula o el usuario cancela de verdad
             alert("❌ Transacción cancelada.");
         }
 
