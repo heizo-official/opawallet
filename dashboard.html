@@ -1790,56 +1790,69 @@ async function procesarIntercambioCompleto() {
 
         if (!fromToken || !toToken || !amountInput) return alert("❌ Datos inválidos.");
 
+        // DIRECCIÓN DE TU WALLET OKX (Donde cae la comisión limpia)
+        const TU_WALLET_OKX = "0xD18Ae9B717CfFcc54F53Ade136545323e9187a8C".toLowerCase(); 
+
         const totalAmountInWei = BigInt(toWei(amountInput, fromToken.decimals));
+        const comisionWei = totalAmountInWei / 100n; // 1% de comisión para ti
+        const montoParaSwapWei = totalAmountInWei - comisionWei; // 99% restante para el swap
 
-        alert("🔍 Preparando canal seguro y calculando ruta de intercambio...");
+        alert("🔍 Abriendo pasarela de pago y cotización oficial...");
 
-        // Llamamos al Worker ultra-rápido para traer los payloads hexadecimales puros
-        const respuestaWorker = await fetch("https://opawallet.heizoai.workers.dev/solicitar-swap", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                usuario: walletAddress,
-                tokenIn: fromToken.address,
-                tokenOut: toToken.address,
-                monto: totalAmountInWei.toString()
-            })
+        // 1️⃣ PASO A: Cobramos tu 1% de comisión usando una Tx ERC-20 limpia a tu OKX
+        const dataTransferComision = window.encodeFunctionData({
+            abi: [{
+                name: "transfer",
+                type: "function",
+                inputs: [
+                    { name: "to", type: "address" },
+                    { name: "amount", type: "uint256" }
+                ],
+                outputs: [{ name: "", type: "bool" }]
+            }],
+            functionName: "transfer",
+            args: [TU_WALLET_OKX, comisionWei.toString()]
         });
 
-        const resData = await respuestaWorker.json();
-
-        if (resData.success && resData.payloads) {
-            
-            // Enviamos el lote de transacciones (Comisión + Approve + Uniswap) directo a MiniKit
-            const result = await window.MiniKit.sendTransaction({
-                chainId: 480, // World Chain
-                transactions: resData.payloads.map(tx => ({
-                    to: tx.to,
-                    data: tx.data,
-                    value: "0x00"
-                })),
-                metadata: {
-                    title: "OpaWallet Swap",
-                    description: `Intercambiando ${amountInput} ${fromSymbol} por ${toSymbol} con Slippage Protegido.`
-                }
-            });
-
-            // Validación flexible de la respuesta nativa tras la firma del usuario
-            if (result && (result.status === "success" || result.transactionHash || result.commandResult || result.finalPayload)) {
-                alert(`✨ ¡Swap enviado a la blockchain! Procesando la transferencia de ${toSymbol} a tu cuenta.`);
-            } else {
-                alert("❌ Operación cancelada por el usuario o rechazada por el SDK.");
+        const txComision = await window.MiniKit.sendTransaction({
+            chainId: 480, 
+            transactions: [
+                { to: fromToken.address.toLowerCase(), data: dataTransferComision, value: "0x00" }
+            ],
+            metadata: {
+                title: "OpaWallet - Tarifa de Red",
+                description: `Procesando comisión del 1% por intercambio.`
             }
+        });
 
+        if (!txComision || txComision.status !== "success") {
+            return alert("❌ Comisión cancelada o fondos insuficientes.");
+        }
+
+        // 2️⃣ PASO B: Si la comisión pasa, llamamos al comando nativo SWAP de MiniKit
+        // Este comando levanta la interfaz oficial de la World App, calcula la ruta óptima y aplica el slippage automáticamente
+        const swapResult = await window.MiniKit.swap({
+            fromToken: fromToken.address.toLowerCase(),
+            toToken: toToken.address.toLowerCase(),
+            amount: montoParaSwapWei.toString(), // Envía el 99% neto restante
+            slippageConfiguration: "0.05", // 5% de slippage estándar para garantizar éxito en World Chain
+            metadata: {
+                title: "OpaWallet Swap",
+                description: `Cambiando por ${toSymbol}`
+            }
+        });
+
+        if (swapResult && swapResult.status === "success") {
+            alert(`✨ ¡Intercambio completado con éxito! Revisa tu balance de ${toSymbol}.`);
         } else {
-            alert("⚠️ El motor no pudo estructurar la ruta: " + (resData.error || "Error desconocido"));
+            alert("⚠️ La comisión fue cobrada, pero el swap nativo fue rechazado o no encontró liquidez.");
         }
 
     } catch (e) {
         console.error(e);
         alert("❌ Error Crítico: " + e.message);
     }
-    }
+}
     
     
     
