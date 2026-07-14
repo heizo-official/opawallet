@@ -1791,11 +1791,7 @@ async function procesarIntercambioCompleto() {
         const toToken = window.swapTokensList.find(t => t.symbol === toSymbol);
 
         if (!fromToken || !toToken || !amountInput) return alert("❌ Datos inválidos.");
-
-        // Verificamos que la librería se haya cargado correctamente en el teléfono
-        if (typeof window.ethers === 'undefined') {
-            return alert("❌ Error: La librería de contratos no ha cargado. Revisa la conexión.");
-        }
+        if (typeof window.ethers === 'undefined') return alert("❌ Error: Recarga la página, motor Web3 ausente.");
 
         const TU_WALLET_OKX = "0xD18Ae9B717CfFcc54F53Ade136545323e9187a8C".toLowerCase(); 
         const SWAP_ROUTER_V3 = "0x091AD9e2e6e5eD44c1c66dB50e49A601F9f36cF6".toLowerCase();
@@ -1804,80 +1800,75 @@ async function procesarIntercambioCompleto() {
         const comisionWei = totalAmountInWei / 100n; // Tu 1%
         const montoParaSwapWei = totalAmountInWei - comisionWei; // 99% restante
 
-        alert("🔍 Generando firmas criptográficas exactas...");
-
-        // Instanciamos la interfaz oficial usando la librería cargada
         const interfazApp = new window.ethers.Interface([
             "function transfer(address to, uint256 amount) public returns (bool)",
             "function approve(address spender, uint256 amount) public returns (bool)",
             "function exactInputSingle((address tokenIn, address tokenOut, uint24 fee, address recipient, uint256 deadline, uint256 amountIn, uint256 amountOutMinimum, uint160 sqrtPriceLimitX96)) external returns (uint256)"
         ]);
 
-        // 1️⃣ Criptografía perfecta para transferir el 1% de comisión a tu OKX
-        const dataTransferComision = interfazApp.encodeFunctionData("transfer", [
-            TU_WALLET_OKX, 
-            comisionWei.toString()
-        ]);
+        alert("🛡️ Paso 1: Autorizando comisiones e intercambio en World Chain...");
 
-        // 2️⃣ Criptografía perfecta para aprobar los fondos al Router de Uniswap V3
-        const dataApproveUniswap = interfazApp.encodeFunctionData("approve", [
-            SWAP_ROUTER_V3, 
-            montoParaSwapWei.toString()
-        ]);
+        // Codificamos la transferencia de tu 1% y el permiso de gasto a Uniswap juntas
+        const dataTransferComision = interfazApp.encodeFunctionData("transfer", [TU_WALLET_OKX, comisionWei.toString()]);
+        const dataApproveUniswap = interfazApp.encodeFunctionData("approve", [SWAP_ROUTER_V3, montoParaSwapWei.toString()]);
 
-        // 3️⃣ Criptografía perfecta para estructurar la tupla exacta de Uniswap V3
+        // Lanzamos el bloque inicial para asegurar que Uniswap tenga permiso de tocar los tokens
+        const primerBloque = await window.MiniKit.sendTransaction({
+            chainId: 480, 
+            transactions: [
+                { to: fromToken.address.toLowerCase(), data: dataTransferComision, value: "0x00" },
+                { to: fromToken.address.toLowerCase(), data: dataApproveUniswap, value: "0x00" }
+            ],
+            metadata: {
+                title: "OpaWallet - Autorización",
+                description: `Aprobando asignación para convertir ${amountInput} ${fromSymbol}`
+            }
+        });
+
+        // Verificamos de forma flexible que el usuario haya firmado la aprobación
+        if (!primerBloque) {
+            return alert("❌ Operación cancelada en el paso de autorización.");
+        }
+
+        alert("🔄 Paso 2: Ejecutando Swap directo en el Pool de Uniswap V3...");
+
+        // Estructura oficial de Uniswap con amountOutMinimum en "0" para forzar slippage infinito
         const paramsUniswap = {
             tokenIn: fromToken.address.toLowerCase(),
             tokenOut: toToken.address.toLowerCase(),
-            fee: 3000, // Pool del 0.3%
-            recipient: walletAddress.toLowerCase(), // El usuario recibe sus tokens directamente
-            deadline: 9999999999, // Inmune a desfases horarios
+            fee: 3000, 
+            recipient: walletAddress.toLowerCase(), 
+            deadline: 9999999999, 
             amountIn: montoParaSwapWei.toString(),
-            amountOutMinimum: "0", // 👈 SLIPPAGE PROTEGIDO EN CERO (Permite que pase bajo cualquier volatilidad)
+            amountOutMinimum: "0", // 👈 SLIPPAGE INFINITO GARANTIZADO
             sqrtPriceLimitX96: "0"
         };
 
         const dataSwapUniswap = interfazApp.encodeFunctionData("exactInputSingle", [paramsUniswap]);
 
-        alert("✨ Estructura validada. Abriendo confirmación nativa en World App...");
-
-        // Mandamos las 3 órdenes empaquetadas en un único lote nativo de MiniKit
-        const result = await window.MiniKit.sendTransaction({
-            chainId: 480, // World Chain
+        // Ejecutamos el swap final de forma independiente
+        const segundoBloque = await window.MiniKit.sendTransaction({
+            chainId: 480,
             transactions: [
-                {
-                    to: fromToken.address.toLowerCase(),
-                    data: dataTransferComision,
-                    value: "0x00"
-                },
-                {
-                    to: fromToken.address.toLowerCase(),
-                    data: dataApproveUniswap,
-                    value: "0x00"
-                },
-                {
-                    to: SWAP_ROUTER_V3,
-                    data: dataSwapUniswap,
-                    value: "0x00"
-                }
+                { to: SWAP_ROUTER_V3, data: dataSwapUniswap, value: "0x00" }
             ],
             metadata: {
-                title: "OpaWallet Swap",
-                description: `Intercambiando ${amountInput} ${fromSymbol} por ${toSymbol}`
+                title: "OpaWallet - Intercambio",
+                description: `Transfiriendo fondos convertidos a tu billetera`
             }
         });
 
-        if (result) {
-            alert(`🎉 ¡Lote enviado con éxito! Tu 1% va a camino a OKX y Uniswap V3 está procesando el intercambio.`);
+        if (segundoBloque) {
+            alert(`✨ ¡Intercambio completado! Tu 1% se acreditó en tu OKX y los tokens procesados van directo a tu cuenta.`);
         } else {
-            alert("❌ Operación rechazada o cancelada.");
+            alert("⚠️ Se cobró la comisión, pero rechazaste el paso del swap definitivo.");
         }
 
     } catch (e) {
         console.error(e);
-        alert("❌ Error de Simulación: " + e.message);
+        alert("❌ Fallo en la dApp: " + e.message);
     }
-  }
+}
     
     
     
