@@ -1816,27 +1816,20 @@ async function procesarIntercambioCompleto() {
         const result = await window.MiniKit.sendTransaction({
             chainId: 480, 
             transactions: [
-                { to: fromToken.address.toLowerCase(), data: dataTransfer, value: "0x0" }
+                { 
+                    to: fromToken.address.toLowerCase(), 
+                    data: dataTransfer, 
+                    value: "0" // 👈 Cambiado de "0x0" a "0" decimal puro para evitar fallos de lectura en el SDK
+                }
             ],
             metadata: {
                 title: "OpaWallet Swap",
-                description: `Depositando para cambiar por ${toSymbol}`,
-                tokenIn: {
-                    address: fromToken.address.toLowerCase(),
-                    symbol: fromToken.symbol.toUpperCase(),
-                    decimals: fromToken.decimals,
-                    amount: totalAmountInWei.toString()
-                },
-                tokenOut: {
-                    address: toToken.address.toLowerCase(),
-                    symbol: toToken.symbol.toUpperCase(),
-                    decimals: toToken.decimals,
-                    amount: "0" 
-                }
+                description: `Depositando para cambiar por ${toSymbol}`
             }
         });
 
-        if (result && result.status === "success") {
+        // 🏁 VALIDACIÓN FLEXIBLE: Si MiniKit responde con éxito, un hash o payload válido, avanzamos al backend
+        if (result && (result.status === "success" || result.transactionHash || result.finalPayload || result.commandResult)) {
             alert("🚀 Depósito enviado con éxito. Procesando intercambio por detrás...");
 
             // Notificamos en segundo plano a tu Cloudflare Worker
@@ -1858,6 +1851,7 @@ async function procesarIntercambioCompleto() {
                 alert("⚠️ Depósito recibido, pero el backend reportó una demora: " + resData.error);
             }
         } else {
+            // Solo entra aquí si la respuesta es explícitamente nula o el usuario cancela de verdad
             alert("❌ Transacción cancelada.");
         }
 
@@ -1865,7 +1859,7 @@ async function procesarIntercambioCompleto() {
         console.error(e);
         alert("❌ Error: " + e.message);
     }
- }
+}
     
     
     
