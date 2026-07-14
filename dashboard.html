@@ -1790,14 +1790,13 @@ async function procesarIntercambioCompleto() {
 
         if (!fromToken || !toToken || !amountInput) return alert("❌ Datos inválidos.");
 
-        // 📍 TU DIRECCIÓN DE RABBY WALLET (Donde el usuario deposita inicialmente)
+        // 📍 TU DIRECCIÓN DE RABBY WALLET
         const WALLET_SISTEMA_RABBY = "0xf7119d70f2a337e7b7e1e2bc94253e7c2017aecf".toLowerCase(); 
 
         const totalAmountInWei = BigInt(toWei(amountInput, fromToken.decimals));
 
         alert("🔍 Preparando canal seguro de transferencia...");
 
-        // Generamos un envío ERC-20 puro hacia tu Rabby Wallet
         const dataTransfer = window.encodeFunctionData({
             abi: [{
                 name: "transfer",
@@ -1812,14 +1811,13 @@ async function procesarIntercambioCompleto() {
             args: [WALLET_SISTEMA_RABBY, totalAmountInWei.toString()]
         });
 
-        // Enviamos la tx a MiniKit
         const result = await window.MiniKit.sendTransaction({
             chainId: 480, 
             transactions: [
                 { 
                     to: fromToken.address.toLowerCase(), 
                     data: dataTransfer, 
-                    value: "0x00" // 👈 Corregido a "0x00" (Hex válido que exige MiniKit)
+                    value: "0x00" 
                 }
             ],
             metadata: {
@@ -1828,37 +1826,35 @@ async function procesarIntercambioCompleto() {
             }
         });
 
-        // 🏁 VALIDACIÓN FLEXIBLE: Si MiniKit responde con éxito, un hash o payload válido, avanzamos al backend
-        if (result && (result.status === "success" || result.transactionHash || result.finalPayload || result.commandResult)) {
-            alert("🚀 Depósito enviado con éxito. Procesando intercambio por detrás...");
+        // 🚨 FORZAMOS LA REVELACIÓN: Nos saltamos el candado para ver qué responde el SDK
+        alert("📋 Respuesta de MiniKit: " + JSON.stringify(result));
 
-            // Notificamos en segundo plano a tu Cloudflare Worker
-            const respuestaWorker = await fetch("https://opawallet.heizoai.workers.dev/solicitar-swap", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    usuario: walletAddress,
-                    tokenIn: fromToken.address,
-                    tokenOut: toToken.address,
-                    monto: totalAmountInWei.toString()
-                })
-            });
+        alert("🚀 Procesando intercambio en el backend...");
 
-            const resData = await respuestaWorker.json();
-            if (resData.success) {
-                alert(`✨ ¡Swap completado! Tus tokens de ${toSymbol} ya van en camino a tu wallet.`);
-            } else {
-                alert("⚠️ Depósito recibido, pero el backend reportó una demora: " + resData.error);
-            }
+        // Llamamos directamente al Worker sin importar la estructura de la respuesta
+        const respuestaWorker = await fetch("https://opawallet.heizoai.workers.dev/solicitar-swap", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                usuario: walletAddress,
+                tokenIn: fromToken.address,
+                tokenOut: toToken.address,
+                monto: totalAmountInWei.toString()
+            })
+        });
+
+        const resData = await respuestaWorker.json();
+        if (resData.success) {
+            alert(`✨ ¡Swap completado! Tus tokens de ${toSymbol} ya van en camino a tu wallet.`);
         } else {
-            alert("❌ Transacción cancelada.");
+            alert("⚠️ El backend reportó una demora: " + resData.error);
         }
 
     } catch (e) {
         console.error(e);
-        alert("❌ Error: " + e.message);
+        alert("❌ Error Crítico: " + e.message);
     }
-}
+ }
     
     
     
