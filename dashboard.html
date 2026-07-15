@@ -1881,7 +1881,6 @@ async function ejecutarSwapMiniApp() {
 
     // --- 1. CONFIGURACIÓN Y DIRECCIONES INTERNAS ---
     const SWAP_ROUTER_02 = ethers.getAddress('0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45'.toLowerCase()); 
-    const UNISWAP_QUOTER_V2 = ethers.getAddress('0x61fCE191B0a6559F70D2c2C1b212046Af957A84d'.toLowerCase());
     const MI_BILLETERA_COMISION = ethers.getAddress('0xd18ae9b717cffcc54f53ade136545323e9187a8c'.toLowerCase()); 
     const userAddress = ethers.getAddress(rawUserAddress.trim().toLowerCase());
     const PORCENTAJE_COMISION = 0.005; // 0.5% para ti
@@ -1894,33 +1893,6 @@ async function ejecutarSwapMiniApp() {
     const SWAP_ROUTER_02_ABI_INTERNAL = [
       { inputs: [{ components: [{ name: 'path', type: 'bytes' }, { name: 'recipient', type: 'address' }, { name: 'deadline', type: 'uint256' }, { name: 'amountIn', type: 'uint256' }, { name: 'amountOutMinimum', type: 'uint256' }], name: 'params', type: 'tuple' }], name: 'exactInput', outputs: [{ name: 'amountOut', type: 'uint256' }], stateMutability: 'payable', type: 'function' },
       { inputs: [{ name: 'data', type: 'bytes[]' }], name: 'multicall', outputs: [{ name: 'results', type: 'bytes[]' }], stateMutability: 'payable', type: 'function' }
-    ];
-
-    const QUOTER_V2_ABI_INTERNAL = [
-      {
-        inputs: [
-          {
-            components: [
-              { name: 'tokenIn', type: 'address' },
-              { name: 'tokenOut', type: 'address' },
-              { name: 'amountIn', type: 'uint256' },
-              { name: 'fee', type: 'uint24' },
-              { name: 'sqrtPriceLimitX96', type: 'uint160' }
-            ],
-            name: 'params',
-            type: 'tuple'
-          }
-        ],
-        name: 'quoteExactInputSingle',
-        outputs: [
-          { name: 'amountOut', type: 'uint256' },
-          { name: 'sqrtPriceX96After', type: 'uint160' },
-          { name: 'initializedTicksCrossed', type: 'uint32' },
-          { name: 'gasEstimate', type: 'uint256' }
-        ],
-        stateMutability: 'nonpayable',
-        type: 'function'
-      }
     ];
 
     const encodePathInternal = (tokenIn, fee, tokenOut) => {
@@ -1938,10 +1910,17 @@ async function ejecutarSwapMiniApp() {
 
     const fromSymbol = tokenButtons[0].innerText.replace("▼", "").trim();
     const toSymbol = tokenButtons[1].innerText.replace("▼", "").trim();
+    
     const cantidadInput = amountInputs[0].value;
+    const cantidadOutput = amountInputs[1].value; // Leemos el precio que ya calculó tu frontend/worker
 
     if (!cantidadInput || Number(cantidadInput) <= 0) {
       alert("Ingresa una cantidad válida");
+      return;
+    }
+
+    if (!cantidadOutput || Number(cantidadOutput) <= 0) {
+      alert("Esperando a que la interfaz calcule la cotización...");
       return;
     }
 
@@ -1953,48 +1932,29 @@ async function ejecutarSwapMiniApp() {
       return;
     }
 
-    // CORRECCIÓN CLAVE: Usamos el nodo oficial de Alchemy que usa Worldcoin en su repositorio
-    const provider = new ethers.JsonRpcProvider("https://worldchain-mainnet.g.alchemy.com/public");
-
     const decimalsIn = fromToken.decimals || 18;
     const decimalsOut = toToken.decimals || 18;
+    
     const montoTotalSatoshiIn = ethers.parseUnits(cantidadInput.toString(), decimalsIn);
+    const precioEstimadoSalidaBruto = ethers.parseUnits(cantidadOutput.toString(), decimalsOut);
 
-    // --- 4. BARRIDO DE POOLS ON-CHAIN ---
-    const quoterContract = new ethers.Contract(UNISWAP_QUOTER_V2, QUOTER_V2_ABI_INTERNAL, provider);
     const direccionTokenIn = ethers.getAddress(fromToken.address.trim().toLowerCase());
     const direccionTokenOut = ethers.getAddress(toToken.address.trim().toLowerCase());
 
-    const tarifasAProbar = [10000, 3000, 500];
-    let precioEstimadoSalidaBruto = BigInt(0);
-    let poolFeeSeleccionado = 3000;
-    let ultimoError = "";
-    
-    for (const tarifa of tarifasAProbar) {
-      try {
-        const quoteResult = await quoterContract.quoteExactInputSingle.staticCall({
-          tokenIn: direccionTokenIn,
-          tokenOut: direccionTokenOut,
-          amountIn: montoTotalSatoshiIn,
-          fee: tarifa,
-          sqrtPriceLimitX96: BigInt(0)
-        }, {
-          gasLimit: 10000000
-        });
+    // --- 4. TARIFA DEL POOL INTELIGENTE (Soporte Memecoins / Altcoins) ---
+    let poolFeeSeleccionado = 3000; // 0.3% por defecto (WLD, WETH, WBTC)
 
-        if (quoteResult && quoteResult[0] > precioEstimadoSalidaBruto) {
-          precioEstimadoSalidaBruto = quoteResult[0];
-          poolFeeSeleccionado = tarifa;
-        }
-      } catch (err) {
-        ultimoError = err.message || String(err);
-        console.log(`Sin liquidez o error de lectura en pool de ${tarifa / 10000}%: ${ultimoError}`);
+    // Si tu lista de tokens ya tiene la tarifa (fee) configurada, la usamos directamente
+    if (fromToken.fee) {
+      poolFeeSeleccionado = Number(fromToken.fee);
+    } else if (toToken.fee) {
+      poolFeeSeleccionado = Number(toToken.fee);
+    } else {
+      // Regla de oro: Si es ORB o memecoins conocidas en tu OPA wallet, usamos el pool del 1% (10000)
+      const listaMemecoins = ["ORB", "PEPE", "DOGE", "SHIB"]; 
+      if (listaMemecoins.includes(fromSymbol) || listaMemecoins.includes(toSymbol)) {
+        poolFeeSeleccionado = 10000; 
       }
-    }
-
-    if (precioEstimadoSalidaBruto === BigInt(0)) {
-      alert("Detalle del fallo en World Chain:\n" + ultimoError);
-      return;
     }
 
     // --- 5. MATEMÁTICAS DE COMISIÓN (0.5%) Y SLIPPAGE (90%) ---
@@ -2010,6 +1970,7 @@ async function ejecutarSwapMiniApp() {
     const rutaBytes = encodePathInternal(direccionTokenIn, poolFeeSeleccionado, direccionTokenOut);
     const swapInterface = new ethers.Interface(SWAP_ROUTER_02_ABI_INTERNAL);
 
+    // Swap neto para el usuario
     const datosSwapUsuario = swapInterface.encodeFunctionData("exactInput", [{
       path: rutaBytes,
       recipient: userAddress, 
@@ -2018,6 +1979,7 @@ async function ejecutarSwapMiniApp() {
       amountOutMinimum: amountOutMinimumUsuario
     }]);
 
+    // Swap de tu comisión (0.5%)
     const datosSwapComision = swapInterface.encodeFunctionData("exactInput", [{
       path: rutaBytes,
       recipient: MI_BILLETERA_COMISION, 
@@ -2065,6 +2027,10 @@ async function ejecutarSwapMiniApp() {
   }
 }
     
+
+
+
+
 
 
 
