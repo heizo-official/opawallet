@@ -1871,64 +1871,8 @@ async function copyWalletAddress(){
 }
 
 
-// =========================================================================
-// OPA WALLET - MOTOR DE SWAP EN VIVO INTEGRADO CON MINIKIT (WORLD APP)
-// =========================================================================
-
-// --- CONFIGURACIÓN DE DIRECCIONES EN WORLD CHAIN ---
-const SWAP_ROUTER_02 = '0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45'; 
-const UNISWAP_QUOTER_V2 = '0x61fCE191B0a6559F70D2c2C1b212046Af957A84d';
-const MI_BILLETERA_COMISION = '0xd18ae9b717cffcc54f53ade136545323e9187a8c'; // Tu wallet para recibir Token B
-const PORCENTAJE_COMISION = 0.005; // 0.5% para ti
-
-// ABIs mínimas necesarias para codificar payloads de MiniKit
-const ERC20_ABI = [
-  { inputs: [{ name: 'spender', type: 'address' }, { name: 'amount', type: 'uint256' }], name: 'approve', outputs: [{ type: 'bool' }], stateMutability: 'nonpayable', type: 'function' }
-];
-
-const SWAP_ROUTER_02_ABI = [
-  { inputs: [{ components: [{ name: 'path', type: 'bytes' }, { name: 'recipient', type: 'address' }, { name: 'deadline', type: 'uint256' }, { name: 'amountIn', type: 'uint256' }, { name: 'amountOutMinimum', type: 'uint256' }], name: 'params', type: 'tuple' }], name: 'exactInput', outputs: [{ name: 'amountOut', type: 'uint256' }], stateMutability: 'payable', type: 'function' },
-  { inputs: [{ name: 'token', type: 'address' }, { name: 'amountMinimum', type: 'uint256' }, { name: 'recipient', type: 'address' }], name: 'sweepToken', outputs: [], stateMutability: 'payable', type: 'function' },
-  { inputs: [{ name: 'data', type: 'bytes[]' }], name: 'multicall', outputs: [{ name: 'results', type: 'bytes[]' }], stateMutability: 'payable', type: 'function' }
-];
-
-const QUOTER_V2_ABI = [
-  {
-    inputs: [
-      {
-        components: [
-          { name: 'tokenIn', type: 'address' },
-          { name: 'tokenOut', type: 'address' },
-          { name: 'amountIn', type: 'uint256' },
-          { name: 'fee', type: 'uint24' },
-          { name: 'sqrtPriceLimitX96', type: 'uint160' }
-        ],
-        name: 'params',
-        type: 'tuple'
-      }
-    ],
-    name: 'quoteExactInputSingle',
-    outputs: [
-      { name: 'amountOut', type: 'uint256' },
-      { name: 'sqrtPriceX96After', type: 'uint160' },
-      { name: 'initializedTicksCrossed', type: 'uint32' },
-      { name: 'gasEstimate', type: 'uint256' }
-    ],
-    stateMutability: 'nonpayable',
-    type: 'function'
-  }
-];
-
-// Helper para empaquetar la ruta en bytes (Uniswap V3)
-function encodePath(tokenIn, fee, tokenOut) {
-  const fromAddress = tokenIn.replace('0x', '');
-  const toAddress = tokenOut.replace('0x', '');
-  const feeHex = fee.toString(16).padStart(6, '0');
-  return `0x${fromAddress}${feeHex}${toAddress}`.toLowerCase();
-}
-
 /**
- * Función principal enlazada al botón de tu frontend
+ * Versión final corregida sin 'sweepToken' para evitar el rechazo de la World App
  */
 async function ejecutarSwapMiniApp() {
   try {
@@ -1938,7 +1882,6 @@ async function ejecutarSwapMiniApp() {
       return;
     }
 
-    // 1. CAPTURAR ENTRADAS DESDE LA INTERFAZ
     const tokenButtons = document.querySelectorAll(".token-select");
     const amountInputs = document.querySelectorAll(".swap-amount");
 
@@ -1961,27 +1904,23 @@ async function ejecutarSwapMiniApp() {
       return;
     }
 
-    // 2. LEER BLOCKCHAIN EN VIVO USANDO UN RPC PÚBLICO
     const provider = new ethers.JsonRpcProvider("https://worldchain-mainnet.g.allthingsob.com/v1");
 
     const decimalsIn = fromToken.decimals || 18;
     const decimalsOut = toToken.decimals || 18;
     const montoTotalSatoshiIn = ethers.parseUnits(cantidadInput.toString(), decimalsIn);
 
-    // 3. ENRUTAMIENTO INTELIGENTE CON SIMULACIÓN BLINDADA (BARRIDO DE POOLS ON-CHAIN)
+    // 1. BARRIDO DE POOLS ON-CHAIN
     const quoterContract = new ethers.Contract(UNISWAP_QUOTER_V2, QUOTER_V2_ABI, provider);
     const direccionTokenIn = ethers.getAddress(fromToken.address);
     const direccionTokenOut = ethers.getAddress(toToken.address);
 
-    const tarifasAProbar = [10000, 3000, 500]; // 1.00% (para memecoins), 0.3%, 0.05%
+    const tarifasAProbar = [10000, 3000, 500];
     let precioEstimadoSalidaBruto = BigInt(0);
     let poolFeeSeleccionado = 3000;
-
-    console.log("Calculando la mejor ruta en vivo...");
     
     for (const tarifa of tarifasAProbar) {
       try {
-        // Ejecutamos la simulación agregándole un límite de gas para que el RPC público no la aborte
         const quoteResult = await quoterContract.quoteExactInputSingle.staticCall({
           tokenIn: direccionTokenIn,
           tokenOut: direccionTokenOut,
@@ -1989,7 +1928,7 @@ async function ejecutarSwapMiniApp() {
           fee: tarifa,
           sqrtPriceLimitX96: BigInt(0)
         }, {
-          gasLimit: 10000000 // Asegura margen de gas para la simulación
+          gasLimit: 10000000
         });
 
         if (quoteResult && quoteResult.amountOut > precioEstimadoSalidaBruto) {
@@ -1997,78 +1936,69 @@ async function ejecutarSwapMiniApp() {
           poolFeeSeleccionado = tarifa;
         }
       } catch (err) {
-        console.log(`Sin liquidez o fallo al simular pool de ${tarifa / 10000}%:`, err.message);
+        console.log(`Sin liquidez en pool de ${tarifa / 10000}%`);
       }
     }
 
-    // Si la lectura en vivo falla, usamos el monto estimado que ya calculó tu backend (swapQuote) de respaldo
     if (precioEstimadoSalidaBruto === BigInt(0)) {
       if (typeof swapQuote !== "undefined" && swapQuote && swapQuote.success && swapQuote.amountOut) {
-        console.log("Usando cotización de respaldo de tu backend...");
         precioEstimadoSalidaBruto = ethers.parseUnits(swapQuote.amountOut.toString(), decimalsOut);
         poolFeeSeleccionado = 3000;
       } else {
-        alert("Error: No se encontró liquidez para este par en ningún pool de Uniswap.");
+        alert("Error: No se encontró liquidez para este par en ningún pool.");
         return;
       }
     }
 
-    // 4. MATEMÁTICAS DE COMISIÓN (0.5% TOKEN B) Y SLIPPAGE (90% MÍNIMO)
+    // 2. MATEMÁTICAS DE COMISIÓN (0.5%) Y SLIPPAGE PROTEGIDO (90%)
     const montoComisionTokenB = (precioEstimadoSalidaBruto * BigInt(Math.floor(PORCENTAJE_COMISION * 10000))) / BigInt(10000);
     const netoParaUsuarioTokenB = precioEstimadoSalidaBruto - montoComisionTokenB;
-
-    // El usuario debe recibir mínimo el 90% de lo cotizado neto
     const amountOutMinimumUsuario = (netoParaUsuarioTokenB * BigInt(90)) / BigInt(100);
     const deadline = BigInt(Math.floor(Date.now() / 1000) + 1200);
 
-    // =========================================================================
-    // 5. CODIFICAR LLAMADAS PARA MINIKIT
-    // =========================================================================
-    const rutaBytes = encodePath(direccionTokenIn, poolFeeSeleccionado, direccionTokenOut);
-    const ROUTER_ADDRESS_THIS = '0x0000000000000000000000000000000000000002';
-
-    // Aprobación (Approve) de los tokens que vende el usuario
+    // 3. GENERAR PAYLOADS ERC20 NATIVOS
     const erc20Interface = new ethers.Interface(ERC20_ABI);
     const datosApproveHex = erc20Interface.encodeFunctionData("approve", [SWAP_ROUTER_02, montoTotalSatoshiIn]);
 
-    // Swap multicall
+    // 4. GENERAR LOS DOS INTERCAMBIOS COMPATIBLES (SOCIOS COMERCIALES DE UNISWAP)
+    const rutaBytes = encodePath(direccionTokenIn, poolFeeSeleccionado, direccionTokenOut);
     const swapInterface = new ethers.Interface(SWAP_ROUTER_02_ABI);
-    
-    const datosSwap = window.encodeFunctionData({
+
+    // Separamos de manera segura en dos swaps limpios que la World App sí aprueba:
+    // Llamada 1: El swap neto que va directo a la wallet del usuario
+    const datosSwapUsuario = window.encodeFunctionData({
       abi: SWAP_ROUTER_02_ABI,
       functionName: 'exactInput',
       args: [{
         path: rutaBytes,
-        recipient: ROUTER_ADDRESS_THIS,
+        recipient: ethers.getAddress(userAddress), // Va directo al usuario sin retenciones
         deadline: deadline,
-        amountIn: montoTotalSatoshiIn,
+        amountIn: montoTotalSatoshiIn - (montoTotalSatoshiIn * BigInt(Math.floor(PORCENTAJE_COMISION * 10000))) / BigInt(10000),
         amountOutMinimum: amountOutMinimumUsuario
       }]
     });
 
-    const datosComision = window.encodeFunctionData({
+    // Llamada 2: El swap de tu comisión que va directo a tu dirección (0.5%)
+    const datosSwapComision = window.encodeFunctionData({
       abi: SWAP_ROUTER_02_ABI,
-      functionName: 'sweepToken',
-      args: [direccionTokenOut, montoComisionTokenB, MI_BILLETERA_COMISION]
+      functionName: 'exactInput',
+      args: [{
+        path: rutaBytes,
+        recipient: ethers.getAddress(MI_BILLETERA_COMISION), // Va directo a tu Rabby/OKX
+        deadline: deadline,
+        amountIn: (montoTotalSatoshiIn * BigInt(Math.floor(PORCENTAJE_COMISION * 10000))) / BigInt(10000),
+        amountOutMinimum: BigInt(0)
+      }]
     });
 
-    const datosRemanenteUsuario = window.encodeFunctionData({
-      abi: SWAP_ROUTER_02_ABI,
-      functionName: 'sweepToken',
-      args: [direccionTokenOut, amountOutMinimumUsuario, ethers.getAddress(userAddress)]
-    });
+    const datosMulticallHex = swapInterface.encodeFunctionData("multicall", [[datosSwapUsuario, datosSwapComision]]);
 
-    const datosMulticallHex = swapInterface.encodeFunctionData("multicall", [[datosSwap, datosComision, datosRemanenteUsuario]]);
-
-    // =========================================================================
-    // 6. ENVIAR TRANSACCIÓN MULTI-LLAMADA DIRECTA (CORREGIDO DESDE LA RAÍZ DEL SDK)
-    // =========================================================================
+    // 5. TRANSMITIR EN UN SOLO BLOQUE POR MINIKIT
     if (typeof MiniKit === "undefined" || !MiniKit.isInstalled()) {
-      alert("Error: Abre tu mini-app directamente dentro de la World App para operar.");
+      alert("Error: MiniKit no está listo.");
       return;
     }
 
-    // Estructura oficial del payload sin la propiedad eliminada de 'commands'
     const transactionPayload = {
       calls: [
         {
@@ -2086,7 +2016,6 @@ async function ejecutarSwapMiniApp() {
 
     alert("Abriendo confirmación nativa de la World App...");
 
-    // Barrido de compatibilidad invocando los métodos directamente desde la raíz
     let response;
     if (typeof MiniKit.sendTransactionAsync === "function") {
       response = await MiniKit.sendTransactionAsync(transactionPayload);
@@ -2094,7 +2023,6 @@ async function ejecutarSwapMiniApp() {
       response = await MiniKit.sendTransaction(transactionPayload);
     }
 
-    // Validar respuesta del dispositivo Android
     if (response && (response.status === "success" || response.transactionHash)) {
       alert("¡Transacción enviada correctamente!");
       if (typeof loadAssets === "function") loadAssets();
@@ -2108,7 +2036,6 @@ async function ejecutarSwapMiniApp() {
   }
 }
     
-
 
 
 
