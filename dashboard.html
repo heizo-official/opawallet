@@ -1871,17 +1871,75 @@ async function copyWalletAddress(){
 }
 
 
+// =========================================================================
+// OPA WALLET - MOTOR DE SWAP EN VIVO INTEGRADO CON MULTI-RUTA (UNISWAP V3)
+// =========================================================================
+
+// --- CONFIGURACIÓN DE DIRECCIONES EN WORLD CHAIN ---
+const SWAP_ROUTER_02 = '0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45'; 
+const UNISWAP_QUOTER_V2 = '0x61fCE191B0a6559F70D2c2C1b212046Af957A84d';
+const MI_BILLETERA_COMISION = '0xd18ae9b717cffcc54f53ade136545323e9187a8c'; // Tu wallet configurada
+const PORCENTAJE_COMISION = 0.005; // 0.5% para ti
+
+// ABIs mínimas necesarias para interactuar con la blockchain
+const ERC20_ABI = [
+  { inputs: [{ name: 'spender', type: 'address' }, { name: 'amount', type: 'uint256' }], name: 'approve', outputs: [{ type: 'bool' }], stateMutability: 'nonpayable', type: 'function' }
+];
+
+const QUOTER_V2_ABI = [
+  {
+    inputs: [
+      {
+        components: [
+          { name: 'tokenIn', type: 'address' },
+          { name: 'tokenOut', type: 'address' },
+          { name: 'amountIn', type: 'uint256' },
+          { name: 'fee', type: 'uint24' },
+          { name: 'sqrtPriceLimitX96', type: 'uint160' }
+        ],
+        name: 'params',
+        type: 'tuple'
+      }
+    ],
+    name: 'quoteExactInputSingle',
+    outputs: [
+      { name: 'amountOut', type: 'uint256' },
+      { name: 'sqrtPriceX96After', type: 'uint160' },
+      { name: 'initializedTicksCrossed', type: 'uint32' },
+      { name: 'gasEstimate', type: 'uint256' }
+    ],
+    stateMutability: 'nonpayable',
+    type: 'function'
+  }
+];
+
+const SWAP_ROUTER_02_ABI = [
+  { inputs: [{ components: [{ name: 'path', type: 'bytes' }, { name: 'recipient', type: 'address' }, { name: 'deadline', type: 'uint256' }, { name: 'amountIn', type: 'uint256' }, { name: 'amountOutMinimum', type: 'uint256' }], name: 'params', type: 'tuple' }], name: 'exactInput', outputs: [{ name: 'amountOut', type: 'uint256' }], stateMutability: 'payable', type: 'function' },
+  { inputs: [{ name: 'token', type: 'address' }, { name: 'amountMinimum', type: 'uint256' }, { name: 'recipient', type: 'address' }], name: 'sweepToken', outputs: [], stateMutability: 'payable', type: 'function' },
+  { inputs: [{ name: 'data', type: 'bytes[]' }], name: 'multicall', outputs: [{ name: 'results', type: 'bytes[]' }], stateMutability: 'payable', type: 'function' }
+];
+
+// Helper para empaquetar las direcciones y comisiones en el formato de bytes que lee Uniswap V3
+function encodePath(tokenIn, fee, tokenOut) {
+  const fromAddress = tokenIn.replace('0x', '');
+  const toAddress = tokenOut.replace('0x', '');
+  const feeHex = fee.toString(16).padStart(6, '0');
+  return `0x${fromAddress}${feeHex}${toAddress}`.toLowerCase();
+}
+
 /**
- * Función corregida y blindada para ejecutarse en vivo desde el móvil
+ * Función principal enlazada al botón onclick="ejecutarSwapMiniApp()"
+ * Hace el barrido de múltiples rutas en vivo para memecoins, deduce comisión y aplica slippage.
  */
 async function ejecutarSwapMiniApp() {
   try {
     const userAddress = localStorage.getItem("walletAddress");
     if (!userAddress) {
-      alert("Error: Conecta primero tu World App");
+      alert("Error: Por favor conecta primero tu World App");
       return;
     }
 
+    // 1. CAPTURAR ELEMENTOS SELECCIONADOS EN TU FRONTEND DE SWAP
     const tokenButtons = document.querySelectorAll(".token-select");
     const amountInputs = document.querySelectorAll(".swap-amount");
 
@@ -1892,11 +1950,11 @@ async function ejecutarSwapMiniApp() {
     const cantidadInput = amountInputs[0].value;
 
     if (!cantidadInput || Number(cantidadInput) <= 0) {
-      alert("Escribe una cantidad válida en el input");
+      alert("Ingresa una cantidad válida a cambiar");
       return;
     }
 
-    // Buscar los tokens en tu lista cargada de la UI
+    // Buscar la data completa de los tokens cargados en la UI
     const fromToken = window.swapTokensList.find(t => t.symbol === fromSymbol);
     const toToken = window.swapTokensList.find(t => t.symbol === toSymbol);
 
@@ -1905,67 +1963,79 @@ async function ejecutarSwapMiniApp() {
       return;
     }
 
-    // Inicializar el proveedor nativo de la World App usando Ethers v6
+    // Inicializar proveedores usando ethers (v6) inyectado por la World App
     const provider = new ethers.BrowserProvider(window.ethereum);
     const signer = await provider.getSigner();
 
     const decimalsIn = fromToken.decimals || 18;
     const decimalsOut = toToken.decimals || 18;
-    
-    // Convertir la cantidad del input a formato de la blockchain (Satoshi/Wei)
     const montoTotalSatoshiIn = ethers.parseUnits(cantidadInput.toString(), decimalsIn);
-    const poolFee = 3000; // Tarifa del pool (0.3%)
 
     // =========================================================================
-    // 1. CONSULTA EN VIVO AL COTIZADOR (QUOTER)
+    // 2. ENRUTAMIENTO INTELIGENTE EN VIVO (BARRIDO DE TARIFAS PARA MEMECOINS)
     // =========================================================================
     const quoterContract = new ethers.Contract(UNISWAP_QUOTER_V2, QUOTER_V2_ABI, provider);
-    
-    // Forzamos las direcciones al formato Checksum que exige Uniswap
     const direccionTokenIn = ethers.getAddress(fromToken.address);
     const direccionTokenOut = ethers.getAddress(toToken.address);
 
-    let precioEstimadoSalidaBruto;
-    try {
-      // Llamada estática para obtener el precio en tiempo real del último bloque
-      const quoteResult = await quoterContract.quoteExactInputSingle.staticCall({
-        tokenIn: direccionTokenIn,
-        tokenOut: direccionTokenOut,
-        amountIn: montoTotalSatoshiIn,
-        fee: poolFee,
-        sqrtPriceLimitX96: 0
-      });
-      precioEstimadoSalidaBruto = quoteResult.amountOut;
-    } catch (err) {
-      console.error(err);
-      alert("Error en el Cotizador: No hay suficiente liquidez en el pool de Uniswap para este par.");
+    // Tarifas a evaluar: 1% (Memecoins/baja liquidez), 0.3% (Estándar), 0.05% (Monedas estables)
+    const tarifasAProbar = [10000, 3000, 500];
+    let precioEstimadoSalidaBruto = BigInt(0);
+    let poolFeeSeleccionado = 3000;
+
+    console.log("Escaneando el mejor pool en World Chain...");
+    
+    for (const tarifa of tarifasAProbar) {
+      try {
+        const quoteResult = await quoterContract.quoteExactInputSingle.staticCall({
+          tokenIn: direccionTokenIn,
+          tokenOut: direccionTokenOut,
+          amountIn: montoTotalSatoshiIn,
+          fee: tarifa,
+          sqrtPriceLimitX96: BigInt(0)
+        });
+
+        if (quoteResult.amountOut > precioEstimadoSalidaBruto) {
+          precioEstimadoSalidaBruto = quoteResult.amountOut;
+          poolFeeSeleccionado = tarifa;
+        }
+      } catch (err) {
+        console.log(`Pool del ${tarifa / 10000}% sin liquidez suficiente para este par.`);
+      }
+    }
+
+    if (precioEstimadoSalidaBruto === BigInt(0)) {
+      alert("Error: No se encontró liquidez para este par en ningún pool de la red.");
       return;
     }
 
+    console.log(`Mejor pool asignado: ${poolFeeSeleccionado / 10000}%. Retorno estimado: ${precioEstimadoSalidaBruto.toString()}`);
+
     // =========================================================================
-    // 2. MATEMÁTICA DE COMISIÓN (0.5%) Y SLIPPAGE (90% MÍNIMO)
+    // 3. CÁLCULO EN CALIENTE DE TU COMISIÓN (0.5%) Y SLIPPAGE (90% MÍNIMO)
     // =========================================================================
     const montoComisionTokenB = (precioEstimadoSalidaBruto * BigInt(Math.floor(PORCENTAJE_COMISION * 10000))) / BigInt(10000);
     const netoParaUsuarioTokenB = precioEstimadoSalidaBruto - montoComisionTokenB;
 
-    // Aplicar tu regla estricta de protección frente al mercado
+    // Aplicar regla estricta: el usuario recibe al menos el 90% de su neto cotizado en el bloque actual
     const amountOutMinimumUsuario = (netoParaUsuarioTokenB * BigInt(90)) / BigInt(100);
-    const deadline = BigInt(Math.floor(Date.now() / 1000) + 1200);
+    const deadline = BigInt(Math.floor(Date.now() / 1000) + 1200); // 20 minutos de margen
 
     // =========================================================================
-    // 3. SOLICITAR AUTORIZACIÓN (APPROVE)
+    // 4. PASO CRÍTICO: TRANSMITIR LA APROBACIÓN (APPROVE) EN EL MÓVIL
     // =========================================================================
-    alert("Paso 1: Autoriza en tu billetera el uso de tus tokens...");
+    alert("Paso 1/2: Autoriza el uso de tus tokens en la billetera...");
     const tokenContract = new ethers.Contract(direccionTokenIn, ERC20_ABI, signer);
     const approveTx = await tokenContract.approve(SWAP_ROUTER_02, montoTotalSatoshiIn);
-    await approveTx.wait(); // Esperar confirmación en la red (1-2 segundos)
+    await approveTx.wait(); // Esperar confirmación rápida del bloque en World Chain
 
     // =========================================================================
-    // 4. EJECUTAR EL INTERCAMBIO (MULTICALL)
+    // 5. EMPAQUETAR LÓGICA ATÓMICA MULTICALL (SWAP + DISTRIBUCIÓN)
     // =========================================================================
-    const rutaBytes = encodePath(direccionTokenIn, poolFee, direccionTokenOut);
-    const ROUTER_ADDRESS_THIS = '0x0000000000000000000000000000000000000002';
+    const rutaBytes = encodePath(direccionTokenIn, poolFeeSeleccionado, direccionTokenOut);
+    const ROUTER_ADDRESS_THIS = '0x0000000000000000000000000000000000000002'; // Indica al router retener los fondos para el multicall
 
+    // Operación A: El Intercambio global que almacena el Token B temporalmente en el Router
     const datosSwap = window.encodeFunctionData({
       abi: SWAP_ROUTER_02_ABI,
       functionName: 'exactInput',
@@ -1978,32 +2048,41 @@ async function ejecutarSwapMiniApp() {
       }]
     });
 
+    // Operación B: Extraer tu 0.5% de comisión en Token B directo hacia tu wallet configurada
     const datosComision = window.encodeFunctionData({
       abi: SWAP_ROUTER_02_ABI,
       functionName: 'sweepToken',
       args: [direccionTokenOut, montoComisionTokenB, MI_BILLETERA_COMISION]
     });
 
+    // Operación C: Extraer el remanente protegido de Token B y enviárselo al usuario
     const datosRemanenteUsuario = window.encodeFunctionData({
       abi: SWAP_ROUTER_02_ABI,
       functionName: 'sweepToken',
       args: [direccionTokenOut, amountOutMinimumUsuario, ethers.getAddress(userAddress)]
     });
 
-    alert("Paso 2: Confirma el Swap definitivo protegido...");
+    // =========================================================================
+    // 6. ENVIAR TRANSACCIÓN COMBINADA FINAL
+    // =========================================================================
+    alert("Paso 2/2: Confirma el intercambio definitivo y protegido...");
     const routerContract = new ethers.Contract(SWAP_ROUTER_02, SWAP_ROUTER_02_ABI, signer);
-    const txResponse = await routerContract.multicall([datosSwap, datosComision, datosRemanenteUsuario]);
     
-    alert("¡Intercambio procesado con éxito!");
+    const txResponse = await routerContract.multicall([datosSwap, datosComision, datosRemanenteUsuario]);
+    console.log("Swap exitoso en World Chain. Hash:", txResponse.hash);
+
+    alert("¡Intercambio completado de manera exitosa!");
+    
+    // Recargar balances visuales de tu OPA wallet
     if (typeof loadAssets === "function") loadAssets();
     
     return txResponse.hash;
 
   } catch (error) {
-    console.error("Error general:", error);
-    alert("La operación falló o fue cancelada en la billetera.");
+    console.error("Fallo general procesando el Swap:", error);
+    alert("La operación falló: El mercado se movió demasiado o cancelaste la transacción.");
   }
-}
+ }
     
 
 
