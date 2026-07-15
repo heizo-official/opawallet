@@ -1947,7 +1947,8 @@ async function ejecutarSwapMiniApp() {
       return;
     }
 
-    const provider = new ethers.JsonRpcProvider("https://worldchain-mainnet.g.allthingsob.com/v1");
+    // NUEVO RPC: Nodo oficial público de World Chain
+    const provider = new ethers.JsonRpcProvider("https://rpc.worldchain.dev");
 
     const decimalsIn = fromToken.decimals || 18;
     const decimalsOut = toToken.decimals || 18;
@@ -1964,6 +1965,7 @@ async function ejecutarSwapMiniApp() {
     
     for (const tarifa of tarifasAProbar) {
       try {
+        console.log(`Consultando pool de ${tarifa / 10000}% en el nodo oficial...`);
         const quoteResult = await quoterContract.quoteExactInputSingle.staticCall({
           tokenIn: direccionTokenIn,
           tokenOut: direccionTokenOut,
@@ -1979,7 +1981,8 @@ async function ejecutarSwapMiniApp() {
           poolFeeSeleccionado = tarifa;
         }
       } catch (err) {
-        console.log(`Sin liquidez en pool de ${tarifa / 10000}%`);
+        // Muestra el error exacto en la consola si el nodo responde pero la llamada falla
+        console.error(`Error de consulta en pool de ${tarifa / 10000}%:`, err.message || err);
       }
     }
 
@@ -2058,8 +2061,9 @@ async function ejecutarSwapMiniApp() {
     console.error(error);
     alert("Error crítico ejecutando el Swap: " + error.message);
   }
-}
+ }
         
+
 
 
 
