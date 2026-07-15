@@ -1872,7 +1872,7 @@ async function copyWalletAddress(){
 
 
 /**
- * Versión final corregida sin 'sweepToken' para evitar el rechazo de la World App
+ * Versión final corregida sin 'sweepToken' y con todas las variables declaradas adentro
  */
 async function ejecutarSwapMiniApp() {
   try {
@@ -1881,6 +1881,12 @@ async function ejecutarSwapMiniApp() {
       alert("Error: Por favor conecta primero tu World App");
       return;
     }
+
+    // --- DIRECCIONES REQUERIDAS ADENTRO DE LA FUNCIÓN ---
+    const SWAP_ROUTER_02 = '0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45'; 
+    const UNISWAP_QUOTER_V2 = '0x61fCE191B0a6559F70D2c2C1b212046Af957A84d';
+    const MI_BILLETERA_COMISION = '0xd18ae9b717cffcc54f53ade136545323e9187a8c'; // Tu wallet
+    const PORCENTAJE_COMISION = 0.005; // 0.5%
 
     const tokenButtons = document.querySelectorAll(".token-select");
     const amountInputs = document.querySelectorAll(".swap-amount");
@@ -1960,7 +1966,7 @@ async function ejecutarSwapMiniApp() {
     const erc20Interface = new ethers.Interface(ERC20_ABI);
     const datosApproveHex = erc20Interface.encodeFunctionData("approve", [SWAP_ROUTER_02, montoTotalSatoshiIn]);
 
-    // 4. GENERAR LOS DOS INTERCAMBIOS COMPATIBLES (SOCIOS COMERCIALES DE UNISWAP)
+    // 4. GENERAR LOS DOS INTERCAMBIOS COMPATIBLES
     const rutaBytes = encodePath(direccionTokenIn, poolFeeSeleccionado, direccionTokenOut);
     const swapInterface = new ethers.Interface(SWAP_ROUTER_02_ABI);
 
@@ -1971,7 +1977,7 @@ async function ejecutarSwapMiniApp() {
       functionName: 'exactInput',
       args: [{
         path: rutaBytes,
-        recipient: ethers.getAddress(userAddress), // Va directo al usuario sin retenciones
+        recipient: ethers.getAddress(userAddress), 
         deadline: deadline,
         amountIn: montoTotalSatoshiIn - (montoTotalSatoshiIn * BigInt(Math.floor(PORCENTAJE_COMISION * 10000))) / BigInt(10000),
         amountOutMinimum: amountOutMinimumUsuario
@@ -1984,7 +1990,7 @@ async function ejecutarSwapMiniApp() {
       functionName: 'exactInput',
       args: [{
         path: rutaBytes,
-        recipient: ethers.getAddress(MI_BILLETERA_COMISION), // Va directo a tu Rabby/OKX
+        recipient: ethers.getAddress(MI_BILLETERA_COMISION), 
         deadline: deadline,
         amountIn: (montoTotalSatoshiIn * BigInt(Math.floor(PORCENTAJE_COMISION * 10000))) / BigInt(10000),
         amountOutMinimum: BigInt(0)
@@ -2034,8 +2040,8 @@ async function ejecutarSwapMiniApp() {
     console.error(error);
     alert("Error crítico ejecutando el Swap: " + error.message);
   }
-}
-    
+ }
+        
 
 
 
