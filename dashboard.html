@@ -1871,46 +1871,14 @@ async function copyWalletAddress(){
 }
 
 
-// --- DIRECCIÓN DEL COTIZADOR OFICIAL EN VIVO DE UNISWAP V3 (WORLD CHAIN) ---
-const UNISWAP_QUOTER_V2 = '0x61fCE191B0a6559F70D2c2C1b212046Af957A84d';
-
-// ABI extendida para incluir la consulta en vivo de QuoterV2
-const QUOTER_V2_ABI = [
-  {
-    inputs: [
-      {
-        components: [
-          { name: 'tokenIn', type: 'address' },
-          { name: 'tokenOut', type: 'address' },
-          { name: 'amountIn', type: 'uint256' },
-          { name: 'fee', type: 'uint24' },
-          { name: 'sqrtPriceLimitX96', type: 'uint160' }
-        ],
-        name: 'params',
-        type: 'tuple'
-      }
-    ],
-    name: 'quoteExactInputSingle',
-    outputs: [
-      { name: 'amountOut', type: 'uint256' },
-      { name: 'sqrtPriceX96After', type: 'uint160' },
-      { name: 'initializedTicksCrossed', type: 'uint32' },
-      { name: 'gasEstimate', type: 'uint256' }
-    ],
-    stateMutability: 'nonpayable',
-    type: 'function'
-  }
-];
-
 /**
- * Función vinculada a tu botón onclick="ejecutarSwapMiniApp()"
- * Ahora calcula la cotización real en el instante de presionar el botón.
+ * Función corregida y blindada para ejecutarse en vivo desde el móvil
  */
 async function ejecutarSwapMiniApp() {
   try {
     const userAddress = localStorage.getItem("walletAddress");
     if (!userAddress) {
-      alert("Por favor, conecta primero tu World App");
+      alert("Error: Conecta primero tu World App");
       return;
     }
 
@@ -1924,67 +1892,78 @@ async function ejecutarSwapMiniApp() {
     const cantidadInput = amountInputs[0].value;
 
     if (!cantidadInput || Number(cantidadInput) <= 0) {
-      alert("Ingresa una cantidad válida");
+      alert("Escribe una cantidad válida en el input");
       return;
     }
 
+    // Buscar los tokens en tu lista cargada de la UI
     const fromToken = window.swapTokensList.find(t => t.symbol === fromSymbol);
     const toToken = window.swapTokensList.find(t => t.symbol === toSymbol);
 
     if (!fromToken || !toToken) {
-      alert("Selecciona ambos tokens");
+      alert("Error: Selecciona ambos tokens en la pantalla");
       return;
     }
 
-    // CONFIGURACIÓN DE PROVEEDOR EN VIVO DE WORLD APP
+    // Inicializar el proveedor nativo de la World App usando Ethers v6
     const provider = new ethers.BrowserProvider(window.ethereum);
     const signer = await provider.getSigner();
 
     const decimalsIn = fromToken.decimals || 18;
     const decimalsOut = toToken.decimals || 18;
+    
+    // Convertir la cantidad del input a formato de la blockchain (Satoshi/Wei)
     const montoTotalSatoshiIn = ethers.parseUnits(cantidadInput.toString(), decimalsIn);
-
-    const poolFee = 3000; // 0.3% pool estándar
+    const poolFee = 3000; // Tarifa del pool (0.3%)
 
     // =========================================================================
-    // PASO CRÍTICO: CONSULTA DE PRECIO EN TIEMPO REAL (ON-CHAIN)
+    // 1. CONSULTA EN VIVO AL COTIZADOR (QUOTER)
     // =========================================================================
-    console.log("Consultando cotización en vivo en World Chain...");
     const quoterContract = new ethers.Contract(UNISWAP_QUOTER_V2, QUOTER_V2_ABI, provider);
     
-    // Llamamos de forma estática (staticCall) para simular el precio exacto actual en los pools
-    const quoteResult = await quoterContract.quoteExactInputSingle.staticCall({
-      tokenIn: fromToken.address,
-      tokenOut: toToken.address,
-      amountIn: montoTotalSatoshiIn,
-      fee: poolFee,
-      sqrtPriceLimitX96: 0
-    });
+    // Forzamos las direcciones al formato Checksum que exige Uniswap
+    const direccionTokenIn = ethers.getAddress(fromToken.address);
+    const direccionTokenOut = ethers.getAddress(toToken.address);
 
-    const precioEstimadoSalidaBruto = quoteResult.amountOut;
-    console.log("Precio fresco obtenido del bloque actual:", precioEstimadoSalidaBruto.toString());
+    let precioEstimadoSalidaBruto;
+    try {
+      // Llamada estática para obtener el precio en tiempo real del último bloque
+      const quoteResult = await quoterContract.quoteExactInputSingle.staticCall({
+        tokenIn: direccionTokenIn,
+        tokenOut: direccionTokenOut,
+        amountIn: montoTotalSatoshiIn,
+        fee: poolFee,
+        sqrtPriceLimitX96: 0
+      });
+      precioEstimadoSalidaBruto = quoteResult.amountOut;
+    } catch (err) {
+      console.error(err);
+      alert("Error en el Cotizador: No hay suficiente liquidez en el pool de Uniswap para este par.");
+      return;
+    }
 
     // =========================================================================
-    // MATEMÁTICA Y APROBACIÓN
+    // 2. MATEMÁTICA DE COMISIÓN (0.5%) Y SLIPPAGE (90% MÍNIMO)
     // =========================================================================
-    // Calcular tu 0.5% sobre la salida real en caliente
     const montoComisionTokenB = (precioEstimadoSalidaBruto * BigInt(Math.floor(PORCENTAJE_COMISION * 10000))) / BigInt(10000);
     const netoParaUsuarioTokenB = precioEstimadoSalidaBruto - montoComisionTokenB;
 
-    // Control estricto de Slippage: el usuario debe recibir al menos el 90% de su neto cotizado en vivo
+    // Aplicar tu regla estricta de protección frente al mercado
     const amountOutMinimumUsuario = (netoParaUsuarioTokenB * BigInt(90)) / BigInt(100);
     const deadline = BigInt(Math.floor(Date.now() / 1000) + 1200);
 
-    // Solicitar Approve
-    alert("Autoriza el uso de tus tokens...");
-    const tokenContract = new ethers.Contract(fromToken.address, ERC20_ABI, signer);
+    // =========================================================================
+    // 3. SOLICITAR AUTORIZACIÓN (APPROVE)
+    // =========================================================================
+    alert("Paso 1: Autoriza en tu billetera el uso de tus tokens...");
+    const tokenContract = new ethers.Contract(direccionTokenIn, ERC20_ABI, signer);
     const approveTx = await tokenContract.approve(SWAP_ROUTER_02, montoTotalSatoshiIn);
-    await approveTx.wait();
+    await approveTx.wait(); // Esperar confirmación en la red (1-2 segundos)
 
     // =========================================================================
-    // PREPARAR MULTICALL CON VALORES FRESCOS
+    // 4. EJECUTAR EL INTERCAMBIO (MULTICALL)
     // =========================================================================
-    const rutaBytes = encodePath(fromToken.address, poolFee, toToken.address);
+    const rutaBytes = encodePath(direccionTokenIn, poolFee, direccionTokenOut);
     const ROUTER_ADDRESS_THIS = '0x0000000000000000000000000000000000000002';
 
     const datosSwap = window.encodeFunctionData({
@@ -2002,33 +1981,33 @@ async function ejecutarSwapMiniApp() {
     const datosComision = window.encodeFunctionData({
       abi: SWAP_ROUTER_02_ABI,
       functionName: 'sweepToken',
-      args: [toToken.address, montoComisionTokenB, MI_BILLETERA_COMISION]
+      args: [direccionTokenOut, montoComisionTokenB, MI_BILLETERA_COMISION]
     });
 
     const datosRemanenteUsuario = window.encodeFunctionData({
       abi: SWAP_ROUTER_02_ABI,
       functionName: 'sweepToken',
-      args: [toToken.address, amountOutMinimumUsuario, userAddress]
+      args: [direccionTokenOut, amountOutMinimumUsuario, ethers.getAddress(userAddress)]
     });
 
-    // Enviar bloque de transacciones
-    alert("Confirma el Swap definitivo protegido...");
+    alert("Paso 2: Confirma el Swap definitivo protegido...");
     const routerContract = new ethers.Contract(SWAP_ROUTER_02, SWAP_ROUTER_02_ABI, signer);
     const txResponse = await routerContract.multicall([datosSwap, datosComision, datosRemanenteUsuario]);
     
-    console.log("Tx exitosa en World Chain, Hash:", txResponse.hash);
-    alert("¡Intercambio procesado con éxito en vivo!");
-
+    alert("¡Intercambio procesado con éxito!");
     if (typeof loadAssets === "function") loadAssets();
+    
     return txResponse.hash;
 
   } catch (error) {
-    console.error("Error en ejecución del Swap en vivo:", error);
-    alert("Error de ejecución: los precios cambiaron drásticamente o cancelaste la operación.");
+    console.error("Error general:", error);
+    alert("La operación falló o fue cancelada en la billetera.");
   }
- }
+}
     
-    
+
+
+
 </script>
 
 <div id="token-details-modal"
