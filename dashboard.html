@@ -1872,7 +1872,7 @@ async function copyWalletAddress(){
 
 
 // =========================================================================
-// MOTOR DE SWAP EN VIVO INTEGRADO CON MINIKIT PARA LA WORLD APP
+// OPA WALLET - MOTOR DE SWAP EN VIVO INTEGRADO CON MINIKIT (WORLD APP)
 // =========================================================================
 
 // --- CONFIGURACIÓN DE DIRECCIONES EN WORLD CHAIN ---
@@ -1981,7 +1981,6 @@ async function ejecutarSwapMiniApp() {
     
     for (const tarifa of tarifasAProbar) {
       try {
-        // Ejecutamos la simulación agregándole un límite de gas para que el RPC público no la aborte
         const quoteResult = await quoterContract.quoteExactInputSingle.staticCall({
           tokenIn: direccionTokenIn,
           tokenOut: direccionTokenOut,
@@ -1989,7 +1988,7 @@ async function ejecutarSwapMiniApp() {
           fee: tarifa,
           sqrtPriceLimitX96: BigInt(0)
         }, {
-          gasLimit: 10000000 // Forzamos margen de gas suficiente para la simulación de lectura
+          gasLimit: 10000000 // Asegura margen de gas para la simulación
         });
 
         if (quoteResult && quoteResult.amountOut > precioEstimadoSalidaBruto) {
@@ -2001,12 +2000,12 @@ async function ejecutarSwapMiniApp() {
       }
     }
 
-    // Si la lectura en vivo falló o no dio resultados, usamos el monto estimado que ya calculó tu backend (swapQuote)
+    // Si la lectura en vivo falla, usamos el monto estimado que ya calculó tu backend (swapQuote) de respaldo
     if (precioEstimadoSalidaBruto === BigInt(0)) {
       if (typeof swapQuote !== "undefined" && swapQuote && swapQuote.success && swapQuote.amountOut) {
         console.log("Usando cotización de respaldo de tu backend...");
         precioEstimadoSalidaBruto = ethers.parseUnits(swapQuote.amountOut.toString(), decimalsOut);
-        poolFeeSeleccionado = 3000; // Pool por defecto
+        poolFeeSeleccionado = 3000;
       } else {
         alert("Error: No se encontró liquidez para este par en ningún pool de Uniswap.");
         return;
@@ -2061,34 +2060,43 @@ async function ejecutarSwapMiniApp() {
     const datosMulticallHex = swapInterface.encodeFunctionData("multicall", [[datosSwap, datosComision, datosRemanenteUsuario]]);
 
     // =========================================================================
-    // 6. ENVIAR TRANSACCIÓN MULTI-LLAMADA USANDO EL SDK DE MINIKIT
+    // 6. ENVIAR TRANSACCIÓN NATIVA CON LA SINTAXIS OFICIAL DE MINIKIT
     // =========================================================================
     if (typeof MiniKit === "undefined" || !MiniKit.isInstalled()) {
       alert("Error: Abre tu mini-app directamente dentro de la World App para operar.");
       return;
     }
 
-    const payload = {
-      payload: {
-        calls: [
-          {
-            to: direccionTokenIn,
-            data: datosApproveHex,
-            value: "0"
-          },
-          {
-            to: SWAP_ROUTER_02,
-            data: datosMulticallHex,
-            value: "0"
-          }
-        ]
-      }
+    // Estructura limpia de llamadas para el payload del SDK
+    const transactionPayload = {
+      calls: [
+        {
+          to: direccionTokenIn,
+          data: datosApproveHex,
+          value: "0"
+        },
+        {
+          to: SWAP_ROUTER_02,
+          data: datosMulticallHex,
+          value: "0"
+        }
+      ]
     };
 
-    // Abre de manera nativa la interfaz de confirmación de World App en el celular
-    const response = await MiniKit.actions.sendTransaction(payload);
+    alert("Abriendo confirmación nativa de la World App...");
 
-    if (response.status === "success") {
+    // Barrido de compatibilidad para evitar errores 'undefined' en ejecuciones móviles de MiniKit
+    let response;
+    if (MiniKit.commands && typeof MiniKit.commands.sendTransactionAsync === "function") {
+      response = await MiniKit.commands.sendTransactionAsync(transactionPayload);
+    } else if (MiniKit.commands && typeof MiniKit.commands.sendTransaction === "function") {
+      response = await MiniKit.commands.sendTransaction(transactionPayload);
+    } else {
+      response = await MiniKit.sendTransaction(transactionPayload);
+    }
+
+    // Validar respuesta del dispositivo Android
+    if (response && (response.status === "success" || response.transactionHash)) {
       alert("¡Transacción enviada correctamente!");
       if (typeof loadAssets === "function") loadAssets();
     } else {
@@ -2099,8 +2107,7 @@ async function ejecutarSwapMiniApp() {
     console.error(error);
     alert("Error crítico ejecutando el Swap: " + error.message);
   }
- }
-            
+}
 
 
 
