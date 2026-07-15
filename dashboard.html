@@ -1873,16 +1873,17 @@ async function copyWalletAddress(){
 
 async function ejecutarSwapMiniApp() {
   try {
-    const userAddress = localStorage.getItem("walletAddress");
-    if (!userAddress) {
+    const rawUserAddress = localStorage.getItem("walletAddress");
+    if (!rawUserAddress) {
       alert("Error: Por favor conecta primero tu World App");
       return;
     }
 
-    // --- 1. CONFIGURACIÓN Y DIRECCIONES INTERNAS ---
-    const SWAP_ROUTER_02 = '0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45'; 
-    const UNISWAP_QUOTER_V2 = '0x61fCE191B0a6559F70D2c2C1b212046Af957A84d';
-    const MI_BILLETERA_COMISION = '0xd18ae9b717cffcc54f53ade136545323e9187a8c'; 
+    // --- 1. CONFIGURACIÓN Y DIRECCIONES INTERNAS (Solución al Checksum de Ethers v6) ---
+    const SWAP_ROUTER_02 = ethers.getAddress('0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45'.toLowerCase()); 
+    const UNISWAP_QUOTER_V2 = ethers.getAddress('0x61fCE191B0a6559F70D2c2C1b212046Af957A84d'.toLowerCase());
+    const MI_BILLETERA_COMISION = ethers.getAddress('0xd18ae9b717cffcc54f53ade136545323e9187a8c'.toLowerCase()); 
+    const userAddress = ethers.getAddress(rawUserAddress.trim().toLowerCase());
     const PORCENTAJE_COMISION = 0.005; // 0.5% para ti
 
     // --- 2. ABIS INTERNAS REQUERIDAS ---
@@ -1911,15 +1912,20 @@ async function ejecutarSwapMiniApp() {
           }
         ],
         name: 'quoteExactInputSingle',
-        outputs: [{ name: 'amountOut', type: 'uint256' }],
+        outputs: [
+          { name: 'amountOut', type: 'uint256' },
+          { name: 'sqrtPriceX96After', type: 'uint160' },
+          { name: 'initializedTicksCrossed', type: 'uint32' },
+          { name: 'gasEstimate', type: 'uint256' }
+        ],
         stateMutability: 'nonpayable',
         type: 'function'
       }
     ];
 
     const encodePathInternal = (tokenIn, fee, tokenOut) => {
-      const fromAddress = tokenIn.replace('0x', '');
-      const toAddress = tokenOut.replace('0x', '');
+      const fromAddress = tokenIn.replace('0x', '').toLowerCase();
+      const toAddress = tokenOut.replace('0x', '').toLowerCase();
       const feeHex = fee.toString(16).padStart(6, '0');
       return `0x${fromAddress}${feeHex}${toAddress}`.toLowerCase();
     };
@@ -1947,17 +1953,16 @@ async function ejecutarSwapMiniApp() {
       return;
     }
 
-    // NUEVO RPC: Nodo oficial público de World Chain
     const provider = new ethers.JsonRpcProvider("https://rpc.worldchain.dev");
 
     const decimalsIn = fromToken.decimals || 18;
     const decimalsOut = toToken.decimals || 18;
     const montoTotalSatoshiIn = ethers.parseUnits(cantidadInput.toString(), decimalsIn);
 
-        // --- 4. BARRIDO DE POOLS ON-CHAIN ---
+    // --- 4. BARRIDO DE POOLS ON-CHAIN ---
     const quoterContract = new ethers.Contract(UNISWAP_QUOTER_V2, QUOTER_V2_ABI_INTERNAL, provider);
-    const direccionTokenIn = ethers.getAddress(fromToken.address);
-    const direccionTokenOut = ethers.getAddress(toToken.address);
+    const direccionTokenIn = ethers.getAddress(fromToken.address.trim().toLowerCase());
+    const direccionTokenOut = ethers.getAddress(toToken.address.trim().toLowerCase());
 
     const tarifasAProbar = [10000, 3000, 500];
     let precioEstimadoSalidaBruto = BigInt(0);
@@ -1966,14 +1971,15 @@ async function ejecutarSwapMiniApp() {
     
     for (const tarifa of tarifasAProbar) {
       try {
-        // Probamos enviando los parámetros como un Array, que en Ethers v6 es más estable para Structs
-        const quoteResult = await quoterContract.quoteExactInputSingle.staticCall([
-          direccionTokenIn,
-          direccionTokenOut,
-          montoTotalSatoshiIn,
-          tarifa,
-          BigInt(0)
-        ]);
+        const quoteResult = await quoterContract.quoteExactInputSingle.staticCall({
+          tokenIn: direccionTokenIn,
+          tokenOut: direccionTokenOut,
+          amountIn: montoTotalSatoshiIn,
+          fee: tarifa,
+          sqrtPriceLimitX96: BigInt(0)
+        }, {
+          gasLimit: 10000000
+        });
 
         if (quoteResult && quoteResult[0] > precioEstimadoSalidaBruto) {
           precioEstimadoSalidaBruto = quoteResult[0];
@@ -1981,16 +1987,14 @@ async function ejecutarSwapMiniApp() {
         }
       } catch (err) {
         ultimoError = err.message || String(err);
-        console.log(`Fallo pool de ${tarifa / 10000}%: ${ultimoError}`);
+        console.log(`Sin liquidez o error de lectura en pool de ${tarifa / 10000}%: ${ultimoError}`);
       }
     }
 
-    // SI SIGUE FALLANDO, ESTO NOS VA A MOSTRAR EL ERROR REAL EN LA PANTALLA DEL CELULAR
     if (precioEstimadoSalidaBruto === BigInt(0)) {
       alert("Detalle del fallo en World Chain:\n" + ultimoError);
       return;
     }
-
 
     // --- 5. MATEMÁTICAS DE COMISIÓN (0.5%) Y SLIPPAGE (90%) ---
     const montoComisionTokenB = (precioEstimadoSalidaBruto * BigInt(Math.floor(PORCENTAJE_COMISION * 10000))) / BigInt(10000);
@@ -2005,19 +2009,19 @@ async function ejecutarSwapMiniApp() {
     const rutaBytes = encodePathInternal(direccionTokenIn, poolFeeSeleccionado, direccionTokenOut);
     const swapInterface = new ethers.Interface(SWAP_ROUTER_02_ABI_INTERNAL);
 
-    // Swap neto para el usuario
+    // Swap neto para el usuario (Se usa userAddress que ya tiene el formato limpio de checksum)
     const datosSwapUsuario = swapInterface.encodeFunctionData("exactInput", [{
       path: rutaBytes,
-      recipient: ethers.getAddress(userAddress), 
+      recipient: userAddress, 
       deadline: deadline,
       amountIn: montoTotalSatoshiIn - (montoTotalSatoshiIn * BigInt(Math.floor(PORCENTAJE_COMISION * 10000))) / BigInt(10000),
       amountOutMinimum: amountOutMinimumUsuario
     }]);
 
-    // Swap de tu comisión (0.5%)
+    // Swap de tu comisión (0.5%) (Se usa MI_BILLETERA_COMISION que ya tiene el formato limpio de checksum)
     const datosSwapComision = swapInterface.encodeFunctionData("exactInput", [{
       path: rutaBytes,
-      recipient: ethers.getAddress(MI_BILLETERA_COMISION), 
+      recipient: MI_BILLETERA_COMISION, 
       deadline: deadline,
       amountIn: (montoTotalSatoshiIn * BigInt(Math.floor(PORCENTAJE_COMISION * 10000))) / BigInt(10000),
       amountOutMinimum: BigInt(0)
@@ -2031,9 +2035,8 @@ async function ejecutarSwapMiniApp() {
       return;
     }
 
-    // Estructura oficial idéntica al demo de GitHub
     const txOptions = {
-      chainId: 480, // Red World Chain
+      chainId: 480, 
       transactions: [
         {
           to: direccionTokenIn,
@@ -2048,7 +2051,6 @@ async function ejecutarSwapMiniApp() {
 
     alert("Abriendo confirmación nativa de la World App...");
 
-    // Enviar transacción al SDK nativo
     const response = await MiniKit.sendTransaction(txOptions);
 
     if (response && response.status === "success") {
@@ -2063,7 +2065,7 @@ async function ejecutarSwapMiniApp() {
     alert("Error crítico ejecutando el Swap: " + error.message);
   }
 }
-    
+        
 
 
 
