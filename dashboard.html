@@ -1871,62 +1871,54 @@ async function copyWalletAddress(){
 }
 
 
+/**
+ * Función oficial adaptada al envío nativo de transacciones de MiniKit en World App
+ */
 async function ejecutarSwapMiniApp() {
   try {
-    // --- DIAGNÓSTICO 1: LEER INTERFAZ ---
     const userAddress = localStorage.getItem("walletAddress");
     if (!userAddress) {
-      alert("Diagnóstico: No se encontró walletAddress en localStorage");
+      alert("Error: Por favor conecta primero tu World App");
       return;
     }
 
+    // 1. CAPTURAR ELEMENTOS DE LA INTERFAZ
     const tokenButtons = document.querySelectorAll(".token-select");
     const amountInputs = document.querySelectorAll(".swap-amount");
+
+    if (tokenButtons.length < 2 || amountInputs.length < 2) return;
 
     const fromSymbol = tokenButtons[0].innerText.replace("▼", "").trim();
     const toSymbol = tokenButtons[1].innerText.replace("▼", "").trim();
     const cantidadInput = amountInputs[0].value;
 
+    if (!cantidadInput || Number(cantidadInput) <= 0) {
+      alert("Ingresa una cantidad válida");
+      return;
+    }
+
     const fromToken = window.swapTokensList.find(t => t.symbol === fromSymbol);
     const toToken = window.swapTokensList.find(t => t.symbol === toSymbol);
 
     if (!fromToken || !toToken) {
-      alert(`Diagnóstico: No se encontró la data de los tokens en la lista. From: ${fromSymbol}, To: ${toSymbol}`);
+      alert("Error: Selecciona ambos tokens");
       return;
     }
 
-    // --- DIAGNÓSTICO 2: VERIFICAR PROVEEDOR BLOCKCHAIN ---
-    let provider;
-    try {
-      if (!window.ethereum) {
-        alert("Diagnóstico: window.ethereum no existe en este navegador móvil.");
-        return;
-      }
-      provider = new ethers.BrowserProvider(window.ethereum);
-    } catch (e) {
-      alert("Diagnóstico falló al crear BrowserProvider: " + e.message);
-      return;
-    }
+    // 2. CONFIGURACIÓN DE PROVEEDOR PÚBLICO EN VIVO
+    // Como no hay window.ethereum, para consultar el Quoter leemos la blockchain usando un RPC público y gratuito de World Chain
+    const provider = new ethers.JsonRpcProvider("https://worldchain-mainnet.g.allthingsob.com/v1");
 
-    // --- DIAGNÓSTICO 3: CONFIGURAR MONTOS ---
     const decimalsIn = fromToken.decimals || 18;
     const decimalsOut = toToken.decimals || 18;
     const montoTotalSatoshiIn = ethers.parseUnits(cantidadInput.toString(), decimalsIn);
     const poolFee = 3000;
 
-    // --- DIAGNÓSTICO 4: FORMATO DE DIRECCIONES ---
-    let direccionTokenIn, direccionTokenOut;
-    try {
-      direccionTokenIn = ethers.getAddress(fromToken.address);
-      direccionTokenOut = ethers.getAddress(toToken.address);
-    } catch (e) {
-      alert(`Diagnóstico falló en formato de dirección. In: ${fromToken.address}, Out: ${toToken.address}. Error: ` + e.message);
-      return;
-    }
-
-    // --- DIAGNÓSTICO 5: ENRUTADOR Y COTIZADOR ---
-    alert("Iniciando consulta al Cotizador en vivo...");
+    // 3. ENRUTADOR INTELIGENTE (BARRIDO DE POOLS)
     const quoterContract = new ethers.Contract(UNISWAP_QUOTER_V2, QUOTER_V2_ABI, provider);
+    const direccionTokenIn = ethers.getAddress(fromToken.address);
+    const direccionTokenOut = ethers.getAddress(toToken.address);
+
     const tarifasAProbar = [10000, 3000, 500];
     let precioEstimadoSalidaBruto = BigInt(0);
     let poolFeeSeleccionado = 3000;
@@ -1951,36 +1943,29 @@ async function ejecutarSwapMiniApp() {
     }
 
     if (precioEstimadoSalidaBruto === BigInt(0)) {
-      alert("Diagnóstico: El cotizador respondió, pero no hay pools con liquidez para este par en Uniswap V3.");
+      alert("Error: No se encontró liquidez para este par en ningún pool.");
       return;
     }
 
-    alert(`¡Cotización Éxitosa! Pool: ${poolFeeSeleccionado}. Monto: ${precioEstimadoSalidaBruto.toString()}`);
-
-    // --- DIAGNÓSTICO 6: ASIGNAR SIGNER ---
-    let signer;
-    try {
-      signer = await provider.getSigner();
-    } catch (e) {
-      alert("Diagnóstico falló al obtener Signer de la wallet: " + e.message);
-      return;
-    }
-
-    // Si todo lo anterior pasa, calcula el slippage y va al Approve
+    // 4. MATEMÁTICAS DE COMISIÓN Y SLIPPAGE
     const montoComisionTokenB = (precioEstimadoSalidaBruto * BigInt(Math.floor(PORCENTAJE_COMISION * 10000))) / BigInt(10000);
     const netoParaUsuarioTokenB = precioEstimadoSalidaBruto - montoComisionTokenB;
     const amountOutMinimumUsuario = (netoParaUsuarioTokenB * BigInt(90)) / BigInt(100);
     const deadline = BigInt(Math.floor(Date.now() / 1000) + 1200);
 
-    alert("Paso 1/2: Enviando Approve...");
-    const tokenContract = new ethers.Contract(direccionTokenIn, ERC20_ABI, signer);
-    const approveTx = await tokenContract.approve(SWAP_ROUTER_02, montoTotalSatoshiIn);
-    await approveTx.wait();
-
-    alert("Paso 2/2: Enviando Multicall...");
+    // =========================================================================
+    // 5. CODIFICAR DATOS PARA LAS TRANSACCIONES NATIVAS DE MINIKIT
+    // =========================================================================
     const rutaBytes = encodePath(direccionTokenIn, poolFeeSeleccionado, direccionTokenOut);
     const ROUTER_ADDRESS_THIS = '0x0000000000000000000000000000000000000002';
 
+    // Aprobación (Approve) de los tokens
+    const erc20Interface = new ethers.Interface(ERC20_ABI);
+    const datosApproveHex = erc20Interface.encodeFunctionData("approve", [SWAP_ROUTER_02, montoTotalSatoshiIn]);
+
+    // Swap multicall
+    const swapInterface = new ethers.Interface(SWAP_ROUTER_02_ABI);
+    
     const datosSwap = window.encodeFunctionData({
       abi: SWAP_ROUTER_02_ABI,
       functionName: 'exactInput',
@@ -2005,17 +1990,53 @@ async function ejecutarSwapMiniApp() {
       args: [direccionTokenOut, amountOutMinimumUsuario, ethers.getAddress(userAddress)]
     });
 
-    const routerContract = new ethers.Contract(SWAP_ROUTER_02, SWAP_ROUTER_02_ABI, signer);
-    const txResponse = await routerContract.multicall([datosSwap, datosComision, datosRemanenteUsuario]);
-    
-    alert("¡Felicidades! Todo salió perfecto. Hash: " + txResponse.hash);
-    if (typeof loadAssets === "function") loadAssets();
+    const datosMulticallHex = swapInterface.encodeFunctionData("multicall", [[datosSwap, datosComision, datosRemanenteUsuario]]);
+
+    // =========================================================================
+    // 6. ENVIAR LA TRANSACCIÓN DIRECTAMENTE POR MINIKIT (SIN WINDOW.ETHEREUM)
+    // =========================================================================
+    if (typeof MiniKit === "undefined" || !MiniKit.isInstalled()) {
+      alert("Error: MiniKit no está listo o no estás dentro de la World App");
+      return;
+    }
+
+    alert("Enviando transacciones protegidas a tu World App...");
+
+    const payload = {
+      payload: {
+        calls: [
+          {
+            to: direccionTokenIn,
+            data: datosApproveHex,
+            value: "0"
+          },
+          {
+            to: SWAP_ROUTER_02,
+            data: datosMulticallHex,
+            value: "0"
+          }
+        ]
+      }
+    };
+
+    // Esto le pide de manera nativa a la World App procesar la aprobación y el swap con una sola firma
+    const response = await MiniKit.actions.sendTransaction(payload);
+
+    if (response.status === "success") {
+      alert("¡Swap enviado con éxito!");
+      if (typeof loadAssets === "function") loadAssets();
+    } else {
+      alert("La transacción fue rechazada o falló en la World App.");
+    }
 
   } catch (error) {
-    alert("Error crítico atrapado en el catch general: " + error.message);
+    console.error(error);
+    alert("Error procesando la transacción de MiniKit: " + error.message);
   }
-}
+ }
     
+
+
 
 
 
