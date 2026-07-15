@@ -996,7 +996,7 @@ oninput="clearTimeout(swapQuoteTimer);swapQuoteTimer=setTimeout(updateSwapQuote,
 
             <button
 class="swap-btn"
-onclick="procesarIntercambioCompleto()">
+onclick="ejecutarSwapMiniApp()">
 Swap
             </button>
         
@@ -1771,128 +1771,150 @@ swapQuote.amountOut;
 
 }
     
-    function toWei(amountStr, decimals) {
-    let [whole, fraction = ''] = amountStr.toString().split('.');
-    if (!whole) whole = '0';
-    fraction = fraction.padEnd(decimals, '0').slice(0, decimals);
-    return BigInt(whole + fraction).toString();
+    import { createPublicClient, createWalletClient, custom, parseUnits, encodeFunctionData } from 'viem';
+import { worldChain } from 'viem/chains';
+
+// --- CONFIGURACIÓN DE DIRECCIONES EN WORLD CHAIN ---
+const SWAP_ROUTER_02 = '0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45'; 
+const MI_BILLETERA_COMISION = '0xd18ae9b717cffcc54f53ade136545323e9187a8c'; // Tu wallet para recibir Token B
+const PORCENTAJE_COMISION = 0.005; // 0.5% de comisión para ti
+
+const ERC20_ABI = [
+  { inputs: [{ name: 'spender', type: 'address' }, { name: 'amount', type: 'uint256' }], name: 'approve', outputs: [{ type: 'bool' }], stateMutability: 'nonpayable', type: 'function' }
+];
+
+const SWAP_ROUTER_02_ABI = [
+  {
+    inputs: [
+      {
+        components: [
+          { name: 'path', type: 'bytes' },
+          { name: 'recipient', type: 'address' },
+          { name: 'deadline', type: 'uint256' },
+          { name: 'amountIn', type: 'uint256' },
+          { name: 'amountOutMinimum', type: 'uint256' }
+        ],
+        name: 'params',
+        type: 'tuple'
+      }
+    ],
+    name: 'exactInput',
+    outputs: [{ name: 'amountOut', type: 'uint256' }],
+    stateMutability: 'payable',
+    type: 'function'
+  },
+  {
+    inputs: [
+      { name: 'token', type: 'address' },
+      { name: 'amountMinimum', type: 'uint256' },
+      { name: 'recipient', type: 'address' }
+    ],
+    name: 'sweepToken',
+    outputs: [],
+    stateMutability: 'payable',
+    type: 'function'
+  },
+  {
+    inputs: [{ name: 'data', type: 'bytes[]' }],
+    name: 'multicall',
+    outputs: [{ name: 'results', type: 'bytes[]' }],
+    stateMutability: 'payable',
+    type: 'function'
+  }
+];
+
+const publicClient = createPublicClient({ chain: worldChain, transport: custom(window.ethereum) });
+const walletClient = createWalletClient({ chain: worldChain, transport: custom(window.ethereum) });
+
+/**
+ * Ejecuta el Swap y extrae la comisión en el Token B (Token de salida)
+ * @param precioEstimadoSalidaBruto Cantidad total esperada de Token B ANTES de comisiones.
+ */
+async function ejecutarSwapMiniApp(tokenInAddress, tokenOutAddress, cantidadInput, decimalsIn, precioEstimadoSalidaBruto) {
+  try {
+    const [address] = await walletClient.getAddresses();
+    const montoTotalSatoshiIn = parseUnits(cantidadInput.toString(), decimalsIn);
+
+    // 1. SOLICITAR APROBACIÓN PARA EL 100% DEL TOKEN A
+    console.log("Solicitando aprobación de tokens...");
+    const approveHash = await walletClient.writeContract({
+      address: tokenInAddress,
+      abi: ERC20_ABI,
+      functionName: 'approve',
+      args: [SWAP_ROUTER_02, montoTotalSatoshiIn],
+      account: address
+    });
+    await publicClient.waitForTransactionReceipt({ hash: approveHash });
+
+    // 2. MATEMÁTICA EN EL FRONTEND (Para mostrarle al usuario antes de firmar)
+    // Tu comisión calculada en base a lo que va a salir (Token B)
+    const montoComisionTokenB = (precioEstimadoSalidaBruto * BigInt(Math.floor(PORCENTAJE_COMISION * 10000))) / BigInt(10000);
+    const netoParaUsuarioTokenB = precioEstimadoSalidaBruto - montoComisionTokenB;
+
+    // 3. APLICAR CONTROL ESTRICTO DE SLIPPAGE DEL 90%
+    // El 90% se calcula estrictamente sobre el NETO final que debe recibir el usuario
+    const amountOutMinimumUsuario = (netoParaUsuarioTokenB * BigInt(90)) / BigInt(100);
+    const deadline = BigInt(Math.floor(Date.now() / 1000) + 1200);
+
+    const poolFee = 3000; 
+    const rutaBytes = encodePath(tokenInAddress, poolFee, tokenOutAddress);
+
+    // 4. PASO A: Ejecutar el Swap enviando los tokens TEMPORALMENTE al propio Router (address(this))
+    // Al poner 'address(0)' o la dirección del router en Uniswap, los tokens se quedan en el balance del contrato listo para dividirse.
+    // El Router reconoce '0x0000000000000000000000000000000000000002' como "guardar en el contrato actual" (MSG_SENDER/ADDRESS_THIS)
+    const ROUTER_ADDRESS_THIS = '0x0000000000000000000000000000000000000002';
+
+    const datosSwap = encodeFunctionData({
+      abi: SWAP_ROUTER_02_ABI,
+      functionName: 'exactInput',
+      args: [{
+        path: rutaBytes,
+        recipient: ROUTER_ADDRESS_THIS, 
+        deadline: deadline,
+        amountIn: montoTotalSatoshiIn,
+        // El swap global debe darnos al menos el mínimo del usuario para poder cumplir la regla
+        amountOutMinimum: amountOutMinimumUsuario 
+      }]
+    });
+
+    // 5. PASO B: Extraer tu comisión de Token B del contrato del Router y mandártela
+    const datosComision = encodeFunctionData({
+      abi: SWAP_ROUTER_02_ABI,
+      functionName: 'sweepToken',
+      args: [tokenOutAddress, montoComisionTokenB, MI_BILLETERA_COMISION]
+    });
+
+    // 6. PASO C: Extraer el resto de Token B del contrato y mandárselo al usuario
+    const datosRemanenteUsuario = encodeFunctionData({
+      abi: SWAP_ROUTER_02_ABI,
+      functionName: 'sweepToken',
+      args: [tokenOutAddress, amountOutMinimumUsuario, address]
+    });
+
+    // 7. ENVIAR TODO EN UNA SOLA FIRMA NATIVA EN ANDROID
+    console.log("Enviando transacciones encadenadas a World Chain...");
+    const txHash = await walletClient.writeContract({
+      address: SWAP_ROUTER_02,
+      abi: SWAP_ROUTER_02_ABI,
+      functionName: 'multicall',
+      args: [[datosSwap, datosComision, datosRemanenteUsuario]], // Ejecución secuencial y atómica
+      account: address
+    });
+
+    console.log("¡Swap exitoso! Comisión cobrada en Token B. Hash:", txHash);
+    return txHash;
+
+  } catch (error) {
+    console.error("Error en el Swap de la Mini-app:", error);
+  }
 }
 
-async function procesarIntercambioCompleto() {
-    try {
-        const walletAddress = localStorage.getItem("walletAddress");
-        if (!walletAddress) return alert("❌ Error: Conecta tu wallet primero.");
-
-        const fromSymbol = document.querySelectorAll(".token-select")[0].innerText.replace("▼", "").trim();
-        const toSymbol = document.querySelectorAll(".token-select")[1].innerText.replace("▼", "").trim();
-        const amountInput = document.querySelectorAll(".swap-amount")[0].value;
-
-        const fromToken = window.swapTokensList.find(t => t.symbol === fromSymbol);
-        const toToken = window.swapTokensList.find(t => t.symbol === toSymbol);
-
-        if (!fromToken || !toToken || !amountInput) return alert("❌ Datos inválidos.");
-        if (typeof window.ethers === 'undefined') return alert("❌ Error: Motor Web3 ausente. Reintegra la librería.");
-
-        const TU_WALLET_OKX = "0xD18Ae9B717CfFcc54F53Ade136545323e9187a8C".toLowerCase(); 
-        const SWAP_ROUTER_V3 = "0x091AD9e2e6e5eD44c1c66dB50e49A601F9f36cF6".toLowerCase();
-
-        const totalAmountInWei = BigInt(toWei(amountInput, fromToken.decimals));
-        const comisionWei = totalAmountInWei / 100n; 
-        const montoParaSwapWei = totalAmountInWei - comisionWei; 
-
-        const interfazApp = new window.ethers.Interface([
-            "function transfer(address to, uint256 amount) public returns (bool)",
-            "function approve(address spender, uint256 amount) public returns (bool)",
-            "function allowance(address owner, address spender) external view returns (uint256)",
-            "function exactInputSingle((address tokenIn, address tokenOut, uint24 fee, address recipient, uint256 deadline, uint256 amountIn, uint256 amountOutMinimum, uint160 sqrtPriceLimitX96)) external returns (uint256)"
-        ]);
-
-        alert("🛡️ Paso 1: Enviando comisión y autorización a la red...");
-
-        const dataTransferComision = interfazApp.encodeFunctionData("transfer", [TU_WALLET_OKX, comisionWei.toString()]);
-        const dataApproveUniswap = interfazApp.encodeFunctionData("approve", [SWAP_ROUTER_V3, montoParaSwapWei.toString()]);
-
-        const primerBloque = await window.MiniKit.sendTransaction({
-            chainId: 480, 
-            transactions: [
-                { to: fromToken.address.toLowerCase(), data: dataTransferComision, value: "0x00" },
-                { to: fromToken.address.toLowerCase(), data: dataApproveUniswap, value: "0x00" }
-            ],
-            metadata: {
-                title: "OpaWallet - Autorización",
-                description: `Procesando saldo inicial para el intercambio`
-            }
-        });
-
-        if (!primerBloque) return alert("❌ Operación cancelada.");
-
-        // 🔍 MONITOREO EN VIVO ASENTADO EN BLOCKCHAIN
-        alert("⏳ Sincronizando con los mineros de World Chain... Esto puede tomar entre 5 y 15 segundos. No cierres la app.");
-        
-        // Usamos un proveedor alternativo directo para evitar la caché del nodo principal
-        const rpcProvider = new window.ethers.JsonRpcProvider("https://worldchain-mainnet.g.allthatnode.com");
-        const contratoToken = new window.ethers.Contract(fromToken.address, interfazApp, rpcProvider);
-        
-        let confirmadoEnBloque = false;
-        
-        // Forzamos un ciclo de lectura real saltándonos la caché interna del navegador
-        for (let intento = 1; intento <= 12; intento++) {
-            try {
-                // Consultamos directamente el estado del contrato en el último bloque minado
-                const allowanceActual = await contratoToken.allowance(walletAddress, SWAP_ROUTER_V3, { blockTag: "latest" });
-                
-                if (BigInt(allowanceActual) >= montoParaSwapWei) {
-                    confirmadoEnBloque = true;
-                    break;
-                }
-            } catch (rpcErr) {
-                console.log("Esperando confirmación de bloque...");
-            }
-            // Esperamos 2.5 segundos exactos entre bloques de World Chain
-            await new Promise(resolve => setTimeout(resolve, 2500));
-        }
-
-        if (!confirmadoEnBloque) {
-            return alert("⚠️ La red está congestionada. Tu comisión ya se procesó, presiona el botón 'Swap' de nuevo para ejecutar el intercambio directamente.");
-        }
-
-        alert("✅ ¡Autorización confirmada en Blockchain! Abriendo Paso 2...");
-
-        const paramsUniswap = {
-            tokenIn: fromToken.address.toLowerCase(),
-            tokenOut: toToken.address.toLowerCase(),
-            fee: 3000, 
-            recipient: walletAddress.toLowerCase(), 
-            deadline: 9999999999, 
-            amountIn: montoParaSwapWei.toString(),
-            amountOutMinimum: "0", // 👈 SLIPPAGE INFINITO FORZADO
-            sqrtPriceLimitX96: "0"
-        };
-
-        const dataSwapUniswap = interfazApp.encodeFunctionData("exactInputSingle", [paramsUniswap]);
-
-        const segundoBloque = await window.MiniKit.sendTransaction({
-            chainId: 480,
-            transactions: [
-                { to: SWAP_ROUTER_V3, data: dataSwapUniswap, value: "0x00" }
-            ],
-            metadata: {
-                title: "OpaWallet - Intercambio",
-                description: `Liquidando conversión final hacia ${toSymbol}`
-            }
-        });
-
-        if (segundoBloque) {
-            alert(`✨ ¡Intercambio completado con éxito mijo! Revisa tu billetera.`);
-        } else {
-            alert("⚠️ Comisión enviada, pero cancelaste el swap final.");
-        }
-
-    } catch (e) {
-        console.error(e);
-        alert("❌ Error: " + e.message);
-    }
- }
+function encodePath(tokenIn, fee, tokenOut) {
+  const fromAddress = tokenIn.replace('0x', '');
+  const toAddress = tokenOut.replace('0x', '');
+  const feeHex = fee.toString(16).padStart(6, '0');
+  return `0x${fromAddress}${feeHex}${toAddress}`.toLowerCase();
+}
     
     
     
