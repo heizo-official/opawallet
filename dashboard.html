@@ -1968,7 +1968,7 @@ async function ejecutarSwapMiniApp() {
     const decimalsOut = toToken.decimals || 18;
     const montoTotalSatoshiIn = ethers.parseUnits(cantidadInput.toString(), decimalsIn);
 
-    // 3. ENRUTAMIENTO INTELIGENTE (BARRIDO DE POOLS ON-CHAIN)
+    // 3. ENRUTAMIENTO INTELIGENTE CON SIMULACIÓN BLINDADA (BARRIDO DE POOLS ON-CHAIN)
     const quoterContract = new ethers.Contract(UNISWAP_QUOTER_V2, QUOTER_V2_ABI, provider);
     const direccionTokenIn = ethers.getAddress(fromToken.address);
     const direccionTokenOut = ethers.getAddress(toToken.address);
@@ -1981,26 +1981,36 @@ async function ejecutarSwapMiniApp() {
     
     for (const tarifa of tarifasAProbar) {
       try {
+        // Ejecutamos la simulación agregándole un límite de gas para que el RPC público no la aborte
         const quoteResult = await quoterContract.quoteExactInputSingle.staticCall({
           tokenIn: direccionTokenIn,
           tokenOut: direccionTokenOut,
           amountIn: montoTotalSatoshiIn,
           fee: tarifa,
           sqrtPriceLimitX96: BigInt(0)
+        }, {
+          gasLimit: 10000000 // Forzamos margen de gas suficiente para la simulación de lectura
         });
 
-        if (quoteResult.amountOut > precioEstimadoSalidaBruto) {
+        if (quoteResult && quoteResult.amountOut > precioEstimadoSalidaBruto) {
           precioEstimadoSalidaBruto = quoteResult.amountOut;
           poolFeeSeleccionado = tarifa;
         }
       } catch (err) {
-        console.log(`Sin liquidez en el pool de ${tarifa / 10000}%`);
+        console.log(`Sin liquidez o fallo al simular pool de ${tarifa / 10000}%:`, err.message);
       }
     }
 
+    // Si la lectura en vivo falló o no dio resultados, usamos el monto estimado que ya calculó tu backend (swapQuote)
     if (precioEstimadoSalidaBruto === BigInt(0)) {
-      alert("Error: No se encontró liquidez para este par en ningún pool de Uniswap.");
-      return;
+      if (typeof swapQuote !== "undefined" && swapQuote && swapQuote.success && swapQuote.amountOut) {
+        console.log("Usando cotización de respaldo de tu backend...");
+        precioEstimadoSalidaBruto = ethers.parseUnits(swapQuote.amountOut.toString(), decimalsOut);
+        poolFeeSeleccionado = 3000; // Pool por defecto
+      } else {
+        alert("Error: No se encontró liquidez para este par en ningún pool de Uniswap.");
+        return;
+      }
     }
 
     // 4. MATEMÁTICAS DE COMISIÓN (0.5% TOKEN B) Y SLIPPAGE (90% MÍNIMO)
@@ -2089,9 +2099,8 @@ async function ejecutarSwapMiniApp() {
     console.error(error);
     alert("Error crítico ejecutando el Swap: " + error.message);
   }
-}
-    
-
+ }
+            
 
 
 
