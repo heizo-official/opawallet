@@ -1872,7 +1872,7 @@ async function copyWalletAddress(){
 
 
 /**
- * Versión final corregida sin 'sweepToken' y con todas las variables declaradas adentro
+ * VERSIÓN FINAL AUTOCONTENIDA - TODO INCLUIDO SIN DEPENDENCIAS EXTERNAS
  */
 async function ejecutarSwapMiniApp() {
   try {
@@ -1882,12 +1882,59 @@ async function ejecutarSwapMiniApp() {
       return;
     }
 
-    // --- DIRECCIONES REQUERIDAS ADENTRO DE LA FUNCIÓN ---
+    // --- 1. CONFIGURACIÓN Y DIRECCIONES INTERNAS ---
     const SWAP_ROUTER_02 = '0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45'; 
     const UNISWAP_QUOTER_V2 = '0x61fCE191B0a6559F70D2c2C1b212046Af957A84d';
-    const MI_BILLETERA_COMISION = '0xd18ae9b717cffcc54f53ade136545323e9187a8c'; // Tu wallet
-    const PORCENTAJE_COMISION = 0.005; // 0.5%
+    const MI_BILLETERA_COMISION = '0xd18ae9b717cffcc54f53ade136545323e9187a8c'; 
+    const PORCENTAJE_COMISION = 0.005; // 0.5% para ti
 
+    // --- 2. ABIS INTERNAS REQUERIDAS ---
+    const ERC20_ABI_INTERNAL = [
+      { inputs: [{ name: 'spender', type: 'address' }, { name: 'amount', type: 'uint256' }], name: 'approve', outputs: [{ type: 'bool' }], stateMutability: 'nonpayable', type: 'function' }
+    ];
+
+    const SWAP_ROUTER_02_ABI_INTERNAL = [
+      { inputs: [{ components: [{ name: 'path', type: 'bytes' }, { name: 'recipient', type: 'address' }, { name: 'deadline', type: 'uint256' }, { name: 'amountIn', type: 'uint256' }, { name: 'amountOutMinimum', type: 'uint256' }], name: 'params', type: 'tuple' }], name: 'exactInput', outputs: [{ name: 'amountOut', type: 'uint256' }], stateMutability: 'payable', type: 'function' },
+      { inputs: [{ name: 'token', type: 'address' }, { name: 'amountMinimum', type: 'uint256' }, { name: 'recipient', type: 'address' }], name: 'sweepToken', outputs: [], stateMutability: 'payable', type: 'function' },
+      { inputs: [{ name: 'data', type: 'bytes[]' }], name: 'multicall', outputs: [{ name: 'results', type: 'bytes[]' }], stateMutability: 'payable', type: 'function' }
+    ];
+
+    const QUOTER_V2_ABI_INTERNAL = [
+      {
+        inputs: [
+          {
+            components: [
+              { name: 'tokenIn', type: 'address' },
+              { name: 'tokenOut', type: 'address' },
+              { name: 'amountIn', type: 'uint256' },
+              { name: 'fee', type: 'uint24' },
+              { name: 'sqrtPriceLimitX96', type: 'uint160' }
+            ],
+            name: 'params',
+            type: 'tuple'
+          }
+        ],
+        name: 'quoteExactInputSingle',
+        outputs: [
+          { name: 'amountOut', type: 'uint256' },
+          { name: 'sqrtPriceX96After', type: 'uint160' },
+          { name: 'initializedTicksCrossed', type: 'uint32' },
+          { name: 'gasEstimate', type: 'uint256' }
+        ],
+        stateMutability: 'nonpayable',
+        type: 'function'
+      }
+    ];
+
+    // Helper interno para formatear la ruta en bytes
+    const encodePathInternal = (tokenIn, fee, tokenOut) => {
+      const fromAddress = tokenIn.replace('0x', '');
+      const toAddress = tokenOut.replace('0x', '');
+      const feeHex = fee.toString(16).padStart(6, '0');
+      return `0x${fromAddress}${feeHex}${toAddress}`.toLowerCase();
+    };
+
+    // --- 3. CAPTURAR ENTRADAS DESDE LA INTERFAZ ---
     const tokenButtons = document.querySelectorAll(".token-select");
     const amountInputs = document.querySelectorAll(".swap-amount");
 
@@ -1916,8 +1963,8 @@ async function ejecutarSwapMiniApp() {
     const decimalsOut = toToken.decimals || 18;
     const montoTotalSatoshiIn = ethers.parseUnits(cantidadInput.toString(), decimalsIn);
 
-    // 1. BARRIDO DE POOLS ON-CHAIN
-    const quoterContract = new ethers.Contract(UNISWAP_QUOTER_V2, QUOTER_V2_ABI, provider);
+    // --- 4. BARRIDO DE POOLS ON-CHAIN ---
+    const quoterContract = new ethers.Contract(UNISWAP_QUOTER_V2, QUOTER_V2_ABI_INTERNAL, provider);
     const direccionTokenIn = ethers.getAddress(fromToken.address);
     const direccionTokenOut = ethers.getAddress(toToken.address);
 
@@ -1956,24 +2003,23 @@ async function ejecutarSwapMiniApp() {
       }
     }
 
-    // 2. MATEMÁTICAS DE COMISIÓN (0.5%) Y SLIPPAGE PROTEGIDO (90%)
+    // --- 5. MATEMÁTICAS DE COMISIÓN (0.5%) Y SLIPPAGE PROTEGIDO (90%) ---
     const montoComisionTokenB = (precioEstimadoSalidaBruto * BigInt(Math.floor(PORCENTAJE_COMISION * 10000))) / BigInt(10000);
     const netoParaUsuarioTokenB = precioEstimadoSalidaBruto - montoComisionTokenB;
     const amountOutMinimumUsuario = (netoParaUsuarioTokenB * BigInt(90)) / BigInt(100);
     const deadline = BigInt(Math.floor(Date.now() / 1000) + 1200);
 
-    // 3. GENERAR PAYLOADS ERC20 NATIVOS
-    const erc20Interface = new ethers.Interface(ERC20_ABI);
+    // --- 6. GENERAR PAYLOADS ERC20 NATIVOS ---
+    const erc20Interface = new ethers.Interface(ERC20_ABI_INTERNAL);
     const datosApproveHex = erc20Interface.encodeFunctionData("approve", [SWAP_ROUTER_02, montoTotalSatoshiIn]);
 
-    // 4. GENERAR LOS DOS INTERCAMBIOS COMPATIBLES
-    const rutaBytes = encodePath(direccionTokenIn, poolFeeSeleccionado, direccionTokenOut);
-    const swapInterface = new ethers.Interface(SWAP_ROUTER_02_ABI);
+    // --- 7. GENERAR LOS DOS INTERCAMBIOS COMPATIBLES (SOCIOS DE UNISWAP) ---
+    const rutaBytes = encodePathInternal(direccionTokenIn, poolFeeSeleccionado, direccionTokenOut);
+    const swapInterface = new ethers.Interface(SWAP_ROUTER_02_ABI_INTERNAL);
 
-    // Separamos de manera segura en dos swaps limpios que la World App sí aprueba:
     // Llamada 1: El swap neto que va directo a la wallet del usuario
     const datosSwapUsuario = window.encodeFunctionData({
-      abi: SWAP_ROUTER_02_ABI,
+      abi: SWAP_ROUTER_02_ABI_INTERNAL,
       functionName: 'exactInput',
       args: [{
         path: rutaBytes,
@@ -1986,7 +2032,7 @@ async function ejecutarSwapMiniApp() {
 
     // Llamada 2: El swap de tu comisión que va directo a tu dirección (0.5%)
     const datosSwapComision = window.encodeFunctionData({
-      abi: SWAP_ROUTER_02_ABI,
+      abi: SWAP_ROUTER_02_ABI_INTERNAL,
       functionName: 'exactInput',
       args: [{
         path: rutaBytes,
@@ -1999,7 +2045,7 @@ async function ejecutarSwapMiniApp() {
 
     const datosMulticallHex = swapInterface.encodeFunctionData("multicall", [[datosSwapUsuario, datosSwapComision]]);
 
-    // 5. TRANSMITIR EN UN SOLO BLOQUE POR MINIKIT
+    // --- 8. TRANSMITIR EN UN SOLO BLOQUE POR MINIKIT ---
     if (typeof MiniKit === "undefined" || !MiniKit.isInstalled()) {
       alert("Error: MiniKit no está listo.");
       return;
@@ -2040,9 +2086,8 @@ async function ejecutarSwapMiniApp() {
     console.error(error);
     alert("Error crítico ejecutando el Swap: " + error.message);
   }
- }
-        
-
+}
+    
 
 
 
