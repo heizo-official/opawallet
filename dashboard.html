@@ -1981,6 +1981,7 @@ async function ejecutarSwapMiniApp() {
     
     for (const tarifa of tarifasAProbar) {
       try {
+        // Ejecutamos la simulación agregándole un límite de gas para que el RPC público no la aborte
         const quoteResult = await quoterContract.quoteExactInputSingle.staticCall({
           tokenIn: direccionTokenIn,
           tokenOut: direccionTokenOut,
@@ -2060,14 +2061,14 @@ async function ejecutarSwapMiniApp() {
     const datosMulticallHex = swapInterface.encodeFunctionData("multicall", [[datosSwap, datosComision, datosRemanenteUsuario]]);
 
     // =========================================================================
-    // 6. ENVIAR TRANSACCIÓN NATIVA CON LA SINTAXIS OFICIAL DE MINIKIT
+    // 6. ENVIAR TRANSACCIÓN MULTI-LLAMADA DIRECTA (CORREGIDO DESDE LA RAÍZ DEL SDK)
     // =========================================================================
     if (typeof MiniKit === "undefined" || !MiniKit.isInstalled()) {
       alert("Error: Abre tu mini-app directamente dentro de la World App para operar.");
       return;
     }
 
-    // Estructura limpia de llamadas para el payload del SDK
+    // Estructura oficial del payload sin la propiedad eliminada de 'commands'
     const transactionPayload = {
       calls: [
         {
@@ -2085,12 +2086,10 @@ async function ejecutarSwapMiniApp() {
 
     alert("Abriendo confirmación nativa de la World App...");
 
-    // Barrido de compatibilidad para evitar errores 'undefined' en ejecuciones móviles de MiniKit
+    // Barrido de compatibilidad invocando los métodos directamente desde la raíz
     let response;
-    if (MiniKit.commands && typeof MiniKit.commands.sendTransactionAsync === "function") {
-      response = await MiniKit.commands.sendTransactionAsync(transactionPayload);
-    } else if (MiniKit.commands && typeof MiniKit.commands.sendTransaction === "function") {
-      response = await MiniKit.commands.sendTransaction(transactionPayload);
+    if (typeof MiniKit.sendTransactionAsync === "function") {
+      response = await MiniKit.sendTransactionAsync(transactionPayload);
     } else {
       response = await MiniKit.sendTransaction(transactionPayload);
     }
@@ -2108,6 +2107,9 @@ async function ejecutarSwapMiniApp() {
     alert("Error crítico ejecutando el Swap: " + error.message);
   }
 }
+    
+
+
 
 
 
