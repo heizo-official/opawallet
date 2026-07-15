@@ -1871,7 +1871,6 @@ async function copyWalletAddress(){
 }
 
 
-
 async function ejecutarSwapMiniApp() {
   try {
     const rawUserAddress = localStorage.getItem("walletAddress");
@@ -1886,13 +1885,13 @@ async function ejecutarSwapMiniApp() {
     const userAddress = ethers.getAddress(rawUserAddress.trim().toLowerCase());
     const PORCENTAJE_COMISION = 0.005; // 0.5% para ti
 
-    // --- 2. ABIS INTERNAS REQUERIDAS (Se agrega método 'transfer' estándar) ---
+    // --- 2. ABIS INTERNAS REQUERIDAS ---
     const ERC20_ABI_INTERNAL = [
       { inputs: [{ name: 'spender', type: 'address' }, { name: 'amount', type: 'uint256' }], name: 'approve', outputs: [{ type: 'bool' }], stateMutability: 'nonpayable', type: 'function' },
       { inputs: [{ name: 'recipient', type: 'address' }, { name: 'amount', type: 'uint256' }], name: 'transfer', outputs: [{ type: 'bool' }], stateMutability: 'nonpayable', type: 'function' }
     ];
 
-    // Usamos exactInputSingle que es lineal, más barato en gas y fácil de leer por la World App
+    // CORRECCIÓN CLAVE: Estructura oficial de SwapRouter02 (7 parámetros, SIN deadline)
     const SWAP_ROUTER_02_ABI_INTERNAL = [
       {
         inputs: [
@@ -1902,7 +1901,6 @@ async function ejecutarSwapMiniApp() {
               { name: 'tokenOut', type: 'address' },
               { name: 'fee', type: 'uint24' },
               { name: 'recipient', type: 'address' },
-              { name: 'deadline', type: 'uint256' },
               { name: 'amountIn', type: 'uint256' },
               { name: 'amountOutMinimum', type: 'uint256' },
               { name: 'sqrtPriceLimitX96', type: 'uint160' }
@@ -1917,6 +1915,13 @@ async function ejecutarSwapMiniApp() {
         type: 'function'
       }
     ];
+
+    const encodePathInternal = (tokenIn, fee, tokenOut) => {
+      const fromAddress = tokenIn.replace('0x', '').toLowerCase();
+      const toAddress = tokenOut.replace('0x', '').toLowerCase();
+      const feeHex = fee.toString(16).padStart(6, '0');
+      return `0x${fromAddress}${feeHex}${toAddress}`.toLowerCase();
+    };
 
     // --- 3. CAPTURAR ENTRADAS DESDE LA INTERFAZ ---
     const tokenButtons = document.querySelectorAll(".token-select");
@@ -1964,9 +1969,9 @@ async function ejecutarSwapMiniApp() {
     } else if (toToken.fee) {
       poolFeeSeleccionado = Number(toToken.fee);
     } else {
-      const listaMemecoins = ["ORB", "BILLBOARD", "AISHI", "HUB", "SUSHI"]; 
+      const listaMemecoins = ["ORB", "BILLBOARD", "HUB", "SUSHI"]; 
       if (listaMemecoins.includes(fromSymbol) || listaMemecoins.includes(toSymbol)) {
-        poolFeeSeleccionado = 10000; // 1% para memecoins
+        poolFeeSeleccionado = 10000; 
       }
     }
 
@@ -1974,40 +1979,36 @@ async function ejecutarSwapMiniApp() {
     const montoComisionTokenIn = (montoTotalSatoshiIn * BigInt(Math.floor(PORCENTAJE_COMISION * 10000))) / BigInt(10000);
     const montoSwapUsuarioTokenIn = montoTotalSatoshiIn - montoComisionTokenIn;
 
-    // Ajustamos la expectativa de salida al 99.5% del valor bruto
     const netoParaUsuarioTokenB = (precioEstimatedSalidaBruto * BigInt(995)) / BigInt(1000);
     const amountOutMinimumUsuario = (netoParaUsuarioTokenB * BigInt(90)) / BigInt(100);
-    const deadline = BigInt(Math.floor(Date.now() / 1000) + 1200);
 
     // --- 6. GENERAR PAYLOADS DE TRANSACCIÓN LINEALES ---
     const erc20Interface = new ethers.Interface(ERC20_ABI_INTERNAL);
     
-    // Transacción 1: Aprobar solo lo que va a consumir el Swap del usuario
+    // Transacción 1: Aprobar los fondos que consumirá el Swap del usuario
     const datosApproveHex = erc20Interface.encodeFunctionData("approve", [SWAP_ROUTER_02, montoSwapUsuarioTokenIn]);
 
-    // Transacción 2: Transferencia directa de tu comisión (0.5% del token de entrada)
+    // Transacción 2: Envío de tu comisión del 0.5% directo a tu billetera
     const datosTransferComisionHex = erc20Interface.encodeFunctionData("transfer", [MI_BILLETERA_COMISION, montoComisionTokenIn]);
 
-    // Transacción 3: Swap directo del 99.5% restante para el usuario
+    // Transacción 3: Swap directo del 99.5% restante (CORREGIDO: Sin deadline en los parámetros de Uniswap V3)
     const swapInterface = new ethers.Interface(SWAP_ROUTER_02_ABI_INTERNAL);
     const datosSwapUsuarioHex = swapInterface.encodeFunctionData("exactInputSingle", [{
       tokenIn: direccionTokenIn,
       tokenOut: direccionTokenOut,
       fee: poolFeeSeleccionado,
       recipient: userAddress,
-      deadline: deadline,
       amountIn: montoSwapUsuarioTokenIn,
       amountOutMinimum: amountOutMinimumUsuario,
       sqrtPriceLimitX96: BigInt(0)
     }]);
 
-    // --- 7. EJECUTAR USANDO LA ESTRUCTURA NATIVA EN ARRAY ---
+    // --- 7. EJECUTAR USANDO LA ESTRUCTURA NATIVA ---
     if (typeof MiniKit === "undefined" || !MiniKit.isInstalled()) {
       alert("Error: MiniKit no está listo.");
       return;
     }
 
-    // Al meterlos ordenados en este array, el parser de la World App identificará la transferencia y el Swap
     const txOptions = {
       chainId: 480, 
       transactions: [
@@ -2017,11 +2018,11 @@ async function ejecutarSwapMiniApp() {
         },
         {
           to: direccionTokenIn,
-          data: datosTransferComisionHex, // Envía la comisión de forma nativa e infalible
+          data: datosTransferComisionHex, 
         },
         {
           to: SWAP_ROUTER_02,
-          data: datosSwapUsuarioHex, // Hace el swap directo
+          data: datosSwapUsuarioHex, 
         }
       ]
     };
@@ -2050,7 +2051,9 @@ async function ejecutarSwapMiniApp() {
     console.error(error);
     alert("Error crítico ejecutando el Swap: " + error.message);
   }
-}
+          }
+        
+
 
 
 
