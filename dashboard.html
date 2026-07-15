@@ -1912,7 +1912,7 @@ async function ejecutarSwapMiniApp() {
     const toSymbol = tokenButtons[1].innerText.replace("▼", "").trim();
     
     const cantidadInput = amountInputs[0].value;
-    const cantidadOutput = amountInputs[1].value; // Leemos el precio que ya calculó tu frontend/worker
+    const cantidadOutput = amountInputs[1].value; // Leemos el precio calculado por tu frontend/worker
 
     if (!cantidadInput || Number(cantidadInput) <= 0) {
       alert("Ingresa una cantidad válida");
@@ -1936,7 +1936,7 @@ async function ejecutarSwapMiniApp() {
     const decimalsOut = toToken.decimals || 18;
     
     const montoTotalSatoshiIn = ethers.parseUnits(cantidadInput.toString(), decimalsIn);
-    const precioEstimadoSalidaBruto = ethers.parseUnits(cantidadOutput.toString(), decimalsOut);
+    const precioEstimatedSalidaBruto = ethers.parseUnits(cantidadOutput.toString(), decimalsOut);
 
     const direccionTokenIn = ethers.getAddress(fromToken.address.trim().toLowerCase());
     const direccionTokenOut = ethers.getAddress(toToken.address.trim().toLowerCase());
@@ -1944,22 +1944,20 @@ async function ejecutarSwapMiniApp() {
     // --- 4. TARIFA DEL POOL INTELIGENTE (Soporte Memecoins / Altcoins) ---
     let poolFeeSeleccionado = 3000; // 0.3% por defecto (WLD, WETH, WBTC)
 
-    // Si tu lista de tokens ya tiene la tarifa (fee) configurada, la usamos directamente
     if (fromToken.fee) {
       poolFeeSeleccionado = Number(fromToken.fee);
     } else if (toToken.fee) {
       poolFeeSeleccionado = Number(toToken.fee);
     } else {
-      // Regla de oro: Si es ORB o memecoins conocidas en tu OPA wallet, usamos el pool del 1% (10000)
       const listaMemecoins = ["ORB", "PEPE", "DOGE", "SHIB"]; 
       if (listaMemecoins.includes(fromSymbol) || listaMemecoins.includes(toSymbol)) {
-        poolFeeSeleccionado = 10000; 
+        poolFeeSeleccionado = 10000; // 1% para memecoins
       }
     }
 
     // --- 5. MATEMÁTICAS DE COMISIÓN (0.5%) Y SLIPPAGE (90%) ---
-    const montoComisionTokenB = (precioEstimadoSalidaBruto * BigInt(Math.floor(PORCENTAJE_COMISION * 10000))) / BigInt(10000);
-    const netoParaUsuarioTokenB = precioEstimadoSalidaBruto - montoComisionTokenB;
+    const montoComisionTokenB = (precioEstimatedSalidaBruto * BigInt(Math.floor(PORCENTAJE_COMISION * 10000))) / BigInt(10000);
+    const netoParaUsuarioTokenB = precioEstimatedSalidaBruto - montoComisionTokenB;
     const amountOutMinimumUsuario = (netoParaUsuarioTokenB * BigInt(90)) / BigInt(100);
     const deadline = BigInt(Math.floor(Date.now() / 1000) + 1200);
 
@@ -2014,21 +2012,30 @@ async function ejecutarSwapMiniApp() {
 
     const response = await MiniKit.sendTransaction(txOptions);
 
-    if (response && response.status === "success") {
-      alert("¡Swap enviado con éxito! ID de operación: " + response.data.userOpHash);
+    // CONTROL INTELIGENTE DE ÉXITO: Soporta respuesta en la raíz o dentro del objeto "data"
+    const esTransaccionExitosa = response && (
+      response.status === "success" || 
+      (response.data && response.data.status === "success")
+    );
+
+    if (esTransaccionExitosa) {
+      const hashOperacion = response.userOpHash || (response.data && response.data.userOpHash) || "Confirmado";
+      alert("¡Swap enviado con éxito!\n\nID de Operación:\n" + hashOperacion);
       if (typeof loadAssets === "function") loadAssets();
     } else {
-      alert("La transacción fue cancelada o rechazada en tu billetera.");
+      // Si la billetera rechaza, te muestra exactamente la estructura recibida para diagnóstico inmediato
+      alert(
+        "La transacción no se completó.\n\n" + 
+        "Detalle devuelto por la billetera:\n" + JSON.stringify(response || "Sin respuesta")
+      );
     }
 
   } catch (error) {
     console.error(error);
     alert("Error crítico ejecutando el Swap: " + error.message);
   }
-}
+ }
     
-
-
 
 
 
